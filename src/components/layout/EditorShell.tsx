@@ -18,6 +18,9 @@ import { StatusBar } from './StatusBar';
 import { ToolBar } from '../toolbar/ToolBar';
 import { PanelDock } from '../panels/PanelDock';
 import { CanvasViewport } from '@/editor/canvas/CanvasViewport';
+import { ViewOnlyBanner } from '../collaboration/ViewOnlyBanner';
+import { useCollaborativeEditor } from '@/hooks/useCollaborativeEditor';
+import { useCollaborationStore } from '@/store/collaborationStore';
 import { NewDocumentDialog } from '../dialogs/NewDocumentDialog';
 import { ExportDialog } from '../dialogs/ExportDialog';
 import { ShortcutsDialog } from '../dialogs/ShortcutsDialog';
@@ -29,6 +32,9 @@ import { editorTokens } from '@/theme/palette';
 
 export const EditorShell: React.FC = () => {
   const stageRef = useRef<Konva.Stage | null>(null);
+  const { userRole } = useCollaborationStore();
+  const { document: doc } = useDocumentStore();
+  const { handlePointerMove } = useCollaborativeEditor(doc?.id || null, userRole);
 
   const {
     activeTool,
@@ -39,7 +45,6 @@ export const EditorShell: React.FC = () => {
   } = useToolStore();
 
   const { undo, redo, canUndo, canRedo } = useHistoryStore();
-  const { document: doc } = useDocumentStore();
   const {
     zoomIn,
     zoomOut,
@@ -315,6 +320,9 @@ export const EditorShell: React.FC = () => {
       {/* 3. Document Tabs */}
       <DocumentTabs />
 
+      {/* View-Only Banner for restricted users */}
+      <ViewOnlyBanner />
+
       {/* 4. Main Middle Area: Toolbar + Canvas + PanelDock */}
       <div
         style={{
@@ -329,7 +337,10 @@ export const EditorShell: React.FC = () => {
 
         {/* Center Canvas Viewport */}
         <div style={{ flex: 1, height: '100%', position: 'relative' }}>
-          <CanvasViewport onStageReady={(stage) => (stageRef.current = stage)} />
+          <CanvasViewport
+            onStageReady={(stage) => (stageRef.current = stage)}
+            onDocumentPointerMove={handlePointerMove}
+          />
         </div>
 
         {/* Right Collapsible Panel Dock */}

@@ -13,6 +13,8 @@ import { GuidesOverlay } from './GuidesOverlay';
 import { CropOverlay } from './CropOverlay';
 import { MarqueeOverlay } from './MarqueeOverlay';
 import { CanvasStage } from './CanvasStage';
+import { RemoteCursorsOverlay } from '@/components/collaboration/RemoteCursorsOverlay';
+import { RemoteSelectionsOverlay } from '@/components/collaboration/RemoteSelectionsOverlay';
 import { ImageLoader } from '@/lib/image/imageLoader';
 import { AddLayerCommand } from '../commands/LayerCommands';
 import { ImageLayer, DEFAULT_ADJUSTMENTS } from '@/types/layer';
@@ -22,11 +24,15 @@ import { nanoid } from 'nanoid';
 
 interface CanvasViewportProps {
   onStageReady?: (stage: Konva.Stage) => void;
+  onDocumentPointerMove?: (x: number, y: number) => void;
 }
 
 const RULER_SIZE = 20;
 
-export const CanvasViewport: React.FC<CanvasViewportProps> = ({ onStageReady }) => {
+export const CanvasViewport: React.FC<CanvasViewportProps> = ({
+  onStageReady,
+  onDocumentPointerMove,
+}) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [viewportSize, setViewportSize] = useState({ width: 1200, height: 800 });
 
@@ -111,8 +117,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({ onStageReady }) 
 
       setMouseDocCoords({ x: roundX, y: roundY });
       setCursorPos(roundX, roundY);
+      onDocumentPointerMove?.(roundX, roundY);
     },
-    [centerDocX, centerDocY, zoom, panBy, setCursorPos]
+    [centerDocX, centerDocY, zoom, panBy, setCursorPos, onDocumentPointerMove]
   );
 
   // Pan interaction
@@ -382,6 +389,12 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({ onStageReady }) 
               onPointerMove={(x, y) => setCursorPos(x, y)}
             />
           </div>
+
+          {/* Remote collaborator selections overlay */}
+          <RemoteSelectionsOverlay zoom={zoom} />
+
+          {/* Remote collaborator cursors overlay */}
+          <RemoteCursorsOverlay zoom={zoom} />
         </div>
       )}
     </div>

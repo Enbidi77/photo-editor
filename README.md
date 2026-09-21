@@ -201,8 +201,80 @@ A `.pxf` file is a JSON document bundling document metadata and the complete lay
 ### 3. Adding a New Command
 1. Create a class implementing `ICommand` in `src/editor/commands/`.
 2. Store the necessary before and after state snapshots in constructor parameters.
-3. In `execute()`, apply the new state via Zustand stores.
-4. In `undo()`, restore the previous state.
+3. In `execute()`, apply the new state via Zustand stores and broadcast via `operationBridge`.
+4. In `undo()`, restore the previous state and broadcast the reversing operation.
+
+---
+
+---
+
+## Backend Architecture: Drizzle ORM + PostgreSQL + Supabase
+
+PixelForge combines **Drizzle ORM** for server-side PostgreSQL persistence and schema migrations with **Supabase** for Auth, Storage, and Realtime collaboration:
+
+```text
+                         Browser
+                            │
+             ┌──────────────┼───────────────┐
+             │              │               │
+             ▼              ▼               ▼
+          Zustand       TanStack Query   Supabase
+             │              │             Auth
+             │              │
+             ▼              ▼
+        Editor Engine    Next.js API
+             │              │
+             │              ▼
+             │          Drizzle ORM
+             │              │
+             │              ▼
+             │          PostgreSQL
+             │
+             ▼
+      Collaboration Adapter
+             │
+             ▼
+      Supabase Realtime
+
+
+Images / Assets
+      │
+      ▼
+Supabase Storage
+```
+
+### Responsibilities
+- **Drizzle ORM & PostgreSQL**:
+  - PostgreSQL schema definitions & type safety (`src/db/schema/*`)
+  - Schema migrations (`drizzle/`)
+  - Project persistence, member management, asset metadata, operation event logs, and version snapshots
+  - Transactional integrity for project creation and deletion
+- **Supabase Auth**: User registration, login, session tokens, password reset, and OAuth identity
+- **Supabase Realtime**: Ephemeral collaboration events, presence, remote cursors, and remote selections
+- **Supabase Storage**: Binary image assets (`project-assets`) and generated canvas thumbnails (`project-thumbnails`)
+
+### Environment Variables (`.env.local`)
+```bash
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+
+# PostgreSQL (Drizzle ORM)
+DATABASE_URL=postgresql://postgres:password@localhost:5432/pixelforge
+```
+
+---
+
+## Database Management & Migrations
+
+Drizzle Kit is configured via `drizzle.config.ts` to manage PostgreSQL migrations:
+
+| Command | Purpose |
+|---|---|
+| `pnpm db:generate` | Inspects schema changes in `src/db/schema/` and generates SQL migration files into `drizzle/` |
+| `pnpm db:migrate` | Runs pending SQL migrations against the target PostgreSQL database |
+| `pnpm db:push` | Pushes schema changes directly to PostgreSQL (ideal for local/prototyping) |
+| `pnpm db:studio` | Launches Drizzle Studio GUI for inspecting and editing database records |
 
 ---
 
@@ -212,24 +284,37 @@ A `.pxf` file is a JSON document bundling document metadata and the complete lay
 - Node.js 18+ (tested on Node 22 and Node 24)
 - pnpm, npm, or yarn
 
-### Install Dependencies
+### 1. Install Dependencies
 ```bash
 pnpm install
 ```
 
-### Run Development Server
+### 2. Configure Environment
+Copy `.env.example` to `.env.local` and configure your database and Supabase credentials:
+```bash
+cp .env.example .env.local
+```
+
+### 3. Generate & Run Database Migrations
+```bash
+pnpm db:generate
+pnpm db:migrate
+```
+
+### 4. Run Development Server
 ```bash
 pnpm dev
 ```
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### Run Tests
+### 5. Run Automated Tests
 ```bash
 pnpm test
 ```
 
-### Production Build
+### 6. Production Build
 ```bash
 pnpm build
 pnpm start
 ```
+

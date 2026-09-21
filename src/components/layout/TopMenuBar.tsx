@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useDocumentStore } from '@/store/documentStore';
 import { useLayerStore } from '@/store/layerStore';
 import { useHistoryStore } from '@/store/historyStore';
@@ -8,6 +9,10 @@ import { useViewStore } from '@/store/viewStore';
 import { useUIStore } from '@/store/uiStore';
 import { useToolStore } from '@/store/toolStore';
 import { useSelectionStore } from '@/store/selectionStore';
+import { useCollaborationStore } from '@/store/collaborationStore';
+import { ConnectionStatusBadge } from '@/components/collaboration/ConnectionStatusBadge';
+import { CollaboratorAvatars } from '@/components/collaboration/CollaboratorAvatars';
+import { ShareDialog } from '@/components/collaboration/ShareDialog';
 import { PxfSerializer } from '@/editor/export/PxfSerializer';
 import { ImageLoader } from '@/lib/image/imageLoader';
 import { AddLayerCommand, DeleteLayerCommand } from '@/editor/commands/LayerCommands';
@@ -19,10 +24,15 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Typography from '@mui/material/Typography';
 import Divider from '@mui/material/Divider';
+import Button from '@mui/material/Button';
+import { Share2, LayoutDashboard } from 'lucide-react';
 
 export const TopMenuBar: React.FC = () => {
+  const router = useRouter();
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const { userRole } = useCollaborationStore();
 
   const { document: doc, closeDocument } = useDocumentStore();
   const {
@@ -267,6 +277,58 @@ export const TopMenuBar: React.FC = () => {
           onClick={(e) => handleMenuClick('help', e)}
         >
           Help
+        </button>
+      </div>
+
+      {/* Right Collaboration & Navigation Area */}
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* Connection Status Badge */}
+        <ConnectionStatusBadge />
+
+        {/* Collaborators Avatar Stack */}
+        <CollaboratorAvatars />
+
+        {/* Share Button */}
+        {doc?.id && (
+          <Button
+            variant="contained"
+            color="primary"
+            size="small"
+            startIcon={<Share2 size={13} />}
+            onClick={() => setShareOpen(true)}
+            sx={{
+              height: 24,
+              fontSize: '0.68rem',
+              px: 1.5,
+              py: 0,
+              textTransform: 'none',
+              boxShadow: 'none',
+            }}
+          >
+            Share
+          </Button>
+        )}
+
+        {/* Dashboard Link */}
+        <button
+          type="button"
+          onClick={() => router.push('/dashboard')}
+          title="Back to Cloud Dashboard"
+          style={{
+            backgroundColor: 'transparent',
+            border: `1px solid ${editorTokens.border.subtle}`,
+            borderRadius: 3,
+            color: editorTokens.text.secondary,
+            padding: '3px 8px',
+            fontSize: '0.68rem',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          <LayoutDashboard size={12} />
+          <span>Dashboard</span>
         </button>
       </div>
 
@@ -743,6 +805,17 @@ export const TopMenuBar: React.FC = () => {
           </MenuItem>,
         ]}
       </Menu>
+
+      {/* Share Dialog */}
+      {doc?.id && (
+        <ShareDialog
+          open={shareOpen}
+          projectId={doc.id}
+          projectName={doc.name}
+          userRole={userRole}
+          onClose={() => setShareOpen(false)}
+        />
+      )}
     </div>
   );
 };
