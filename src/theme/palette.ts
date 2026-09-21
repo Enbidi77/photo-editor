@@ -1,0 +1,41 @@
+export const editorTokens = {
+  bg: {
+    app: '#181818',
+    panel: '#202020',
+    panelHeader: '#242424',
+    toolbar: '#252525',
+    canvas: '#111111',
+    surface: '#282828',
+    input: '#161616',
+    activeRow: '#2a2d32',
+    hoverRow: '#26282c',
+    divider: '#2e2e2e',
+  },
+  border: {
+    subtle: '#2c2c2c',
+    medium: '#383838',
+    focus: '#0078d4',
+    selection: '#388bfd',
+  },
+  text: {
+    primary: '#e2e2e2',
+    secondary: '#989898',
+    muted: '#666666',
+    inverse: '#121212',
+    accent: '#58a6ff',
+  },
+  accent: {
+    primary: '#0078d4',
+    primaryHover: '#106ebe',
+    primaryActive: '#005a9e',
+    danger: '#e5534b',
+    dangerHover: '#f85149',
+    success: '#3fb950',
+    warning: '#d29922',
+  },
+  shadow: {
+    canvasDoc: '0 8px 30px rgba(0, 0, 0, 0.65)',
+    panel: '0 2px 8px rgba(0, 0, 0, 0.4)',
+    menu: '0 4px 16px rgba(0, 0, 0, 0.7)',
+  },
+};
