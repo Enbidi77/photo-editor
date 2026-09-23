@@ -18,6 +18,8 @@ import {
   ChangeBlendModeCommand,
 } from '@/editor/commands/LayerCommands';
 import { editorTokens } from '@/theme/palette';
+import { EditorContextMenu } from '@/components/common/EditorContextMenu';
+import { useEditorContextMenu } from '@/hooks/useEditorContextMenu';
 import {
   Eye,
   EyeOff,
@@ -36,7 +38,6 @@ import {
   CircleDot,
 } from 'lucide-react';
 import Select from '@mui/material/Select';
-import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Slider from '@mui/material/Slider';
 import Tooltip from '@mui/material/Tooltip';
@@ -81,14 +82,7 @@ export const LayersPanel: React.FC = () => {
 
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
-  const [contextMenu, setContextMenu] = React.useState<{ mouseX: number; mouseY: number; layerId: string } | null>(null);
-
-  const handleContextMenu = (event: React.MouseEvent, layerId: string) => {
-    event.preventDefault();
-    setContextMenu({ mouseX: event.clientX, mouseY: event.clientY, layerId });
-  };
-
-  const handleContextMenuClose = () => setContextMenu(null);
+  const { contextMenu, openLayerMenu, closeMenu } = useEditorContextMenu();
 
   const activeLayer = layers.find((l) => l.id === activeLayerId);
 
@@ -252,8 +246,10 @@ export const LayersPanel: React.FC = () => {
               <div
                 key={layer.id}
                 onClick={(e) => selectLayer(layer.id, e.shiftKey || e.ctrlKey || e.metaKey)}
-                onDoubleClick={() => startRenaming(layer)}
-                onContextMenu={(e) => handleContextMenu(e, layer.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  openLayerMenu(layer.id, e.clientX, e.clientY, 'layers-panel');
+                }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -508,66 +504,14 @@ export const LayersPanel: React.FC = () => {
       </div>
 
       {/* Layer Context Menu */}
-      <Menu
-        open={contextMenu !== null}
-        onClose={handleContextMenuClose}
-        anchorReference="anchorPosition"
-        anchorPosition={
-          contextMenu !== null
-            ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
-            : undefined
-        }
-      >
-        {(() => {
-          const targetLayer = layers.find((l) => l.id === contextMenu?.layerId);
-          return [
-            !targetLayer?.mask && (
-              <MenuItem key="ctx-add-mask" onClick={() => {
-                handleContextMenuClose();
-                if (contextMenu?.layerId && doc) {
-                  const cmd = new AddMaskCommand(contextMenu.layerId, doc.width, doc.height);
-                  executeCommand(cmd);
-                }
-              }}>
-                Add Layer Mask
-              </MenuItem>
-            ),
-            targetLayer?.mask && (
-              <MenuItem key="ctx-del-mask" onClick={() => {
-                handleContextMenuClose();
-                if (contextMenu?.layerId && targetLayer.mask) {
-                  const cmd = new RemoveMaskCommand(contextMenu.layerId, targetLayer.mask);
-                  executeCommand(cmd);
-                }
-              }}>
-                Delete Layer Mask
-              </MenuItem>
-            ),
-            targetLayer?.mask && (
-              <MenuItem key="ctx-toggle-mask" onClick={() => {
-                handleContextMenuClose();
-                if (contextMenu?.layerId) {
-                  const cmd = new ToggleMaskEnabledCommand(contextMenu.layerId);
-                  executeCommand(cmd);
-                }
-              }}>
-                {targetLayer.mask.enabled ? 'Disable' : 'Enable'} Layer Mask
-              </MenuItem>
-            ),
-            targetLayer?.mask && (
-              <MenuItem key="ctx-apply-mask" onClick={() => {
-                handleContextMenuClose();
-                if (contextMenu?.layerId && targetLayer.mask) {
-                  const cmd = new ApplyMaskCommand(contextMenu.layerId, targetLayer.mask);
-                  executeCommand(cmd);
-                }
-              }}>
-                Apply Layer Mask
-              </MenuItem>
-            ),
-          ].filter(Boolean);
-        })()}
-      </Menu>
+      <EditorContextMenu
+        contextMenu={contextMenu}
+        onClose={closeMenu}
+        onStartRename={(layerId) => {
+          const target = layers.find((l) => l.id === layerId);
+          if (target) startRenaming(target);
+        }}
+      />
     </div>
   );
 };

@@ -13,6 +13,7 @@ import {
   ShapeGradientConfig,
   formatCssGradient,
   resolveGradientStops,
+  colorToHex,
 } from '@/lib/image/gradient';
 import { useToolStore } from '@/store/toolStore';
 import Slider from '@mui/material/Slider';
@@ -460,9 +461,10 @@ export const PropertiesPanel: React.FC = () => {
                     {/* Preset Swatches */}
                     <div style={rowSx}>
                       <span style={labelSx}>Presets:</span>
-                      <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', maxWidth: 140 }}>
+                      <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', maxWidth: 145, alignItems: 'center' }}>
                         {GRADIENT_PRESETS.map((preset) => {
                           const pStops = resolveGradientStops(preset.id, foregroundColor, backgroundColor);
+                          const isSelected = shapeGradient.presetId === preset.id;
                           return (
                             <button
                               key={preset.id}
@@ -484,85 +486,175 @@ export const PropertiesPanel: React.FC = () => {
                                 width: 20,
                                 height: 16,
                                 borderRadius: 2,
-                                border: `1px solid ${editorTokens.border.subtle}`,
+                                border: isSelected ? '2px solid #0078d4' : `1px solid ${editorTokens.border.subtle}`,
                                 background: formatCssGradient(pStops),
                                 cursor: 'pointer',
                                 padding: 0,
+                                outline: 'none',
+                                boxShadow: isSelected ? '0 0 0 1px #ffffff' : 'none',
                               }}
                             />
                           );
                         })}
+                        {shapeGradient.presetId === 'custom' && (
+                          <span
+                            style={{
+                              fontSize: '0.62rem',
+                              padding: '1px 5px',
+                              borderRadius: 2,
+                              backgroundColor: editorTokens.accent.primary,
+                              color: '#ffffff',
+                              fontWeight: 600,
+                            }}
+                          >
+                            Custom
+                          </span>
+                        )}
                       </div>
                     </div>
 
-                    {/* Start Color & End Color custom pickers */}
-                    <div style={rowSx}>
-                      <span style={labelSx}>Colors:</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {/* Start Stop Color */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                          <span style={{ fontSize: '0.65rem', color: editorTokens.text.muted }}>1:</span>
-                          <div
-                            style={{
-                              width: 18,
-                              height: 18,
-                              backgroundColor: shapeStops[0]?.color || '#000000',
-                              border: '1px solid #777',
-                              borderRadius: 2,
-                              cursor: 'pointer',
-                            }}
-                            onClick={() => {
-                              const input = document.createElement('input');
-                              input.type = 'color';
-                              input.value = shapeStops[0]?.color || '#000000';
-                              input.onchange = (e) => {
-                                const newStops = [...shapeStops];
-                                newStops[0] = { ...newStops[0], color: (e.target as HTMLInputElement).value };
-                                handleUpdate(
-                                  {
-                                    gradient: { ...shapeGradient, stops: newStops },
-                                  } as Partial<ShapeLayer>,
-                                  'Gradient Start Color'
-                                );
-                              };
-                              input.click();
-                            }}
-                          />
-                        </div>
+                    {/* Custom Color Stops */}
+                    <div style={{ ...rowSx, alignItems: 'flex-start' }}>
+                      <span style={{ ...labelSx, paddingTop: 4 }}>Colors:</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', maxWidth: 165 }}>
+                        {shapeStops.map((stop, idx) => {
+                          const hexColor = colorToHex(stop.color);
+                          const isRemovable = shapeStops.length > 2 && idx > 0 && idx < shapeStops.length - 1;
+                          return (
+                            <div
+                              key={`shape-stop-${idx}`}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 2,
+                                backgroundColor: editorTokens.bg.input,
+                                padding: '1px 3px',
+                                borderRadius: 3,
+                                border: `1px solid ${editorTokens.border.subtle}`,
+                              }}
+                            >
+                              <label
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  cursor: 'pointer',
+                                  position: 'relative',
+                                }}
+                                title={`Stop ${idx + 1}: ${stop.color} (${Math.round(stop.offset * 100)}%) - Click to choose custom color`}
+                              >
+                                <div
+                                  style={{
+                                    width: 16,
+                                    height: 16,
+                                    backgroundColor: stop.color,
+                                    borderRadius: 2,
+                                    border: `1px solid ${editorTokens.border.medium}`,
+                                  }}
+                                />
+                                <input
+                                  type="color"
+                                  value={hexColor}
+                                  onChange={(e) => {
+                                    const newColor = e.target.value;
+                                    const nextStops = shapeStops.map((s, i) =>
+                                      i === idx ? { ...s, color: newColor } : s
+                                    );
+                                    handleUpdate(
+                                      {
+                                        gradient: {
+                                          ...shapeGradient,
+                                          presetId: 'custom',
+                                          stops: nextStops,
+                                        },
+                                      } as Partial<ShapeLayer>,
+                                      `Gradient Stop ${idx + 1} Color`
+                                    );
+                                  }}
+                                  style={{
+                                    position: 'absolute',
+                                    opacity: 0,
+                                    width: 16,
+                                    height: 16,
+                                    cursor: 'pointer',
+                                    top: 0,
+                                    left: 0,
+                                  }}
+                                />
+                              </label>
 
-                        {/* End Stop Color */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                          <span style={{ fontSize: '0.65rem', color: editorTokens.text.muted }}>2:</span>
-                          <div
-                            style={{
-                              width: 18,
-                              height: 18,
-                              backgroundColor: shapeStops[shapeStops.length - 1]?.color || '#ffffff',
-                              border: '1px solid #777',
-                              borderRadius: 2,
-                              cursor: 'pointer',
-                            }}
-                            onClick={() => {
-                              const input = document.createElement('input');
-                              input.type = 'color';
-                              input.value = shapeStops[shapeStops.length - 1]?.color || '#ffffff';
-                              input.onchange = (e) => {
-                                const newStops = [...shapeStops];
-                                newStops[newStops.length - 1] = {
-                                  ...newStops[newStops.length - 1],
-                                  color: (e.target as HTMLInputElement).value,
-                                };
-                                handleUpdate(
-                                  {
-                                    gradient: { ...shapeGradient, stops: newStops },
-                                  } as Partial<ShapeLayer>,
-                                  'Gradient End Color'
-                                );
-                              };
-                              input.click();
-                            }}
-                          />
-                        </div>
+                              {isRemovable && (
+                                <button
+                                  type="button"
+                                  title="Remove stop"
+                                  onClick={() => {
+                                    const nextStops = shapeStops.filter((_, i) => i !== idx);
+                                    handleUpdate(
+                                      {
+                                        gradient: {
+                                          ...shapeGradient,
+                                          presetId: 'custom',
+                                          stops: nextStops,
+                                        },
+                                      } as Partial<ShapeLayer>,
+                                      'Remove Gradient Stop'
+                                    );
+                                  }}
+                                  style={{
+                                    backgroundColor: 'transparent',
+                                    border: 'none',
+                                    color: editorTokens.text.muted,
+                                    cursor: 'pointer',
+                                    padding: 0,
+                                    fontSize: '0.7rem',
+                                    lineHeight: 1,
+                                  }}
+                                >
+                                  &times;
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        {/* Add Stop Button */}
+                        <button
+                          type="button"
+                          title="Add color stop to gradient"
+                          onClick={() => {
+                            const newOffset = shapeStops.length >= 2
+                              ? Number(((shapeStops[0].offset + shapeStops[shapeStops.length - 1].offset) / 2).toFixed(2))
+                              : 0.5;
+                            const nextStops = [
+                              ...shapeStops,
+                              { offset: newOffset, color: foregroundColor || '#ffff00' },
+                            ].sort((a, b) => a.offset - b.offset);
+                            handleUpdate(
+                              {
+                                gradient: {
+                                  ...shapeGradient,
+                                  presetId: 'custom',
+                                  stops: nextStops,
+                                },
+                              } as Partial<ShapeLayer>,
+                              'Add Gradient Stop'
+                            );
+                          }}
+                          style={{
+                            height: 20,
+                            padding: '0 5px',
+                            backgroundColor: editorTokens.bg.input,
+                            border: `1px solid ${editorTokens.border.subtle}`,
+                            borderRadius: 3,
+                            color: editorTokens.text.primary,
+                            cursor: 'pointer',
+                            fontSize: '0.75rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          +
+                        </button>
                       </div>
                     </div>
 

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   computeGradientT,
   parseColorToRgba,
+  colorToHex,
   buildGradientLUT,
   resolveGradientStops,
   renderGradientToImageData,
@@ -371,5 +372,138 @@ describe('Paint Layer Gradient Data Integration', () => {
 
     cmd.undo();
     expect(useLayerStore.getState().layers).toHaveLength(0);
+  });
+});
+
+describe('Custom Gradient Colors & colorToHex', () => {
+  describe('colorToHex', () => {
+    it('returns 6-digit hex as-is in lowercase', () => {
+      expect(colorToHex('#ff00aa')).toBe('#ff00aa');
+      expect(colorToHex('#ABCDEF')).toBe('#abcdef');
+    });
+
+    it('expands 3-digit hex strings to 6-digit hex', () => {
+      expect(colorToHex('#fff')).toBe('#ffffff');
+      expect(colorToHex('#000')).toBe('#000000');
+      expect(colorToHex('#f0a')).toBe('#ff00aa');
+    });
+
+    it('converts rgb and rgba strings to 6-digit hex', () => {
+      expect(colorToHex('rgb(255, 0, 0)')).toBe('#ff0000');
+      expect(colorToHex('rgb(0, 255, 0)')).toBe('#00ff00');
+      expect(colorToHex('rgba(0, 0, 255, 0.5)')).toBe('#0000ff');
+      expect(colorToHex('rgb(10, 20, 30)')).toBe('#0a141e');
+    });
+
+    it('handles named colors and fallbacks', () => {
+      expect(colorToHex('white')).toBe('#ffffff');
+      expect(colorToHex('black')).toBe('#000000');
+      expect(colorToHex('transparent')).toBe('#000000');
+      expect(colorToHex('')).toBe('#000000');
+    });
+  });
+
+  describe('Custom Gradient Resolution & Modification', () => {
+    it('resolves custom preset using provided stops', () => {
+      const customStops: GradientStop[] = [
+        { offset: 0, color: '#ff0055' },
+        { offset: 0.5, color: '#00ffee' },
+        { offset: 1, color: '#ffea00' },
+      ];
+      const resolved = resolveGradientStops('custom', '#000000', '#ffffff', customStops);
+      expect(resolved).toEqual(customStops);
+      expect(resolved).toHaveLength(3);
+    });
+
+    it('supports adding and removing stops on custom gradients', () => {
+      const initialStops: GradientStop[] = [
+        { offset: 0, color: '#112233' },
+        { offset: 1, color: '#445566' },
+      ];
+
+      // Add a middle stop
+      const added = [
+        ...initialStops,
+        { offset: 0.5, color: '#998877' },
+      ].sort((a, b) => a.offset - b.offset);
+
+      expect(added).toHaveLength(3);
+      expect(added[1].offset).toBe(0.5);
+      expect(added[1].color).toBe('#998877');
+
+      // Remove middle stop
+      const removed = added.filter((_, i) => i !== 1);
+      expect(removed).toHaveLength(2);
+      expect(removed[0].color).toBe('#112233');
+      expect(removed[1].color).toBe('#445566');
+    });
+
+    it('updates ShapeLayer with custom stops and presetId: custom', () => {
+      useLayerStore.getState().clearLayers();
+
+      const shapeLayer: ShapeLayer = {
+        id: 'shape-custom-grad',
+        type: 'SHAPE',
+        name: 'Custom Gradient Shape',
+        visible: true,
+        locked: false,
+        opacity: 1,
+        blendMode: 'normal',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+        rotation: 0,
+        zIndex: 0,
+        parentId: null,
+        shapeKind: 'rect',
+        fill: '#000000',
+        fillType: 'gradient',
+        gradient: {
+          type: 'linear',
+          presetId: 'custom',
+          stops: [
+            { offset: 0, color: '#ff0000' },
+            { offset: 0.5, color: '#00ff00' },
+            { offset: 1, color: '#0000ff' },
+          ],
+          reverse: false,
+          opacity: 1,
+        },
+      };
+
+      useLayerStore.getState().addLayer(shapeLayer);
+
+      const customStopsUpdated: GradientStop[] = [
+        { offset: 0, color: '#ff1493' },
+        { offset: 0.5, color: '#00ffff' },
+        { offset: 1, color: '#ffd700' },
+      ];
+
+      const cmd = new UpdateLayerPropertiesCommand(
+        'shape-custom-grad',
+        shapeLayer,
+        {
+          ...shapeLayer,
+          gradient: {
+            ...shapeLayer.gradient!,
+            presetId: 'custom',
+            stops: customStopsUpdated,
+          },
+        },
+        'Update Custom Gradient Colors'
+      );
+
+      cmd.execute();
+      const updated = useLayerStore.getState().layers[0] as ShapeLayer;
+      expect(updated.gradient?.presetId).toBe('custom');
+      expect(updated.gradient?.stops[0].color).toBe('#ff1493');
+      expect(updated.gradient?.stops[1].color).toBe('#00ffff');
+      expect(updated.gradient?.stops[2].color).toBe('#ffd700');
+
+      cmd.undo();
+      const reverted = useLayerStore.getState().layers[0] as ShapeLayer;
+      expect(reverted.gradient?.stops[0].color).toBe('#ff0000');
+    });
   });
 });

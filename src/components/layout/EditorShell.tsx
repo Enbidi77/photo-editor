@@ -370,6 +370,11 @@ export const EditorShell: React.FC = () => {
 
   return (
     <div
+      onContextMenu={(e) => {
+        if (!isFormInputElement(e.target)) {
+          e.preventDefault();
+        }
+      }}
       style={{
         display: 'flex',
         flexDirection: 'column',

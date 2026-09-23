@@ -23,6 +23,8 @@ import {
 } from '@/types/layer';
 import { AddLayerCommand, TransformLayerCommand, UpdateLayerPropertiesCommand } from '../commands/LayerCommands';
 import { nanoid } from 'nanoid';
+import { useEditorContextMenu } from '@/hooks/useEditorContextMenu';
+import { EditorContextMenu } from '@/components/common/EditorContextMenu';
 import {
   GradientType,
   renderGradientCanvas,
@@ -59,6 +61,8 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
   const { activeTool, options, foregroundColor, setForegroundColor, backgroundColor } = useToolStore();
   const { executeCommand } = useHistoryStore();
   const { setSelection } = useSelectionStore();
+  const { contextMenu, openLayerMenu, openCanvasMenu, closeMenu } = useEditorContextMenu();
+  const contextMenuHandledRef = useRef(false);
 
   // Active interaction refs
   const isDrawingRef = useRef(false);
@@ -133,6 +137,20 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
 
     mainLayer.add(transformer);
 
+    stage.on('contextmenu', (e) => {
+      e.evt.preventDefault();
+      if (contextMenuHandledRef.current) {
+        contextMenuHandledRef.current = false;
+        return;
+      }
+      const pointerPos = stage.getPointerPosition();
+      openCanvasMenu(
+        e.evt.clientX,
+        e.evt.clientY,
+        pointerPos ? { x: Math.round(pointerPos.x), y: Math.round(pointerPos.y) } : undefined
+      );
+    });
+
     stageRef.current = stage;
     mainLayerRef.current = mainLayer;
     transformerRef.current = transformer;
@@ -206,7 +224,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
           opacity: layer.opacity,
           visible: layer.visible,
           draggable: activeTool === 'move' && !layer.locked,
-          listening: !layer.locked,
+          listening: layer.visible,
           globalCompositeOperation: layer.blendMode === 'normal' ? 'source-over' : (layer.blendMode as any),
         });
 
@@ -285,7 +303,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
           opacity: layer.opacity,
           visible: layer.visible,
           draggable: activeTool === 'move' && !layer.locked,
-          listening: !layer.locked,
+          listening: layer.visible,
           globalCompositeOperation: layer.blendMode === 'normal' ? 'source-over' : (layer.blendMode as any),
         });
       } else if (layer.type === 'SHAPE') {
@@ -306,7 +324,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
             opacity: layer.opacity,
             visible: layer.visible,
             draggable: activeTool === 'move' && !layer.locked,
-            listening: !layer.locked,
+            listening: layer.visible,
             globalCompositeOperation: layer.blendMode === 'normal' ? 'source-over' : (layer.blendMode as any),
           });
         } else if (shapeLayer.shapeKind === 'circle' || shapeLayer.shapeKind === 'ellipse') {
@@ -324,7 +342,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
             opacity: layer.opacity,
             visible: layer.visible,
             draggable: activeTool === 'move' && !layer.locked,
-            listening: !layer.locked,
+            listening: layer.visible,
             globalCompositeOperation: layer.blendMode === 'normal' ? 'source-over' : (layer.blendMode as any),
           });
         } else if (shapeLayer.shapeKind === 'polygon') {
@@ -342,7 +360,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
             opacity: layer.opacity,
             visible: layer.visible,
             draggable: activeTool === 'move' && !layer.locked,
-            listening: !layer.locked,
+            listening: layer.visible,
             globalCompositeOperation: layer.blendMode === 'normal' ? 'source-over' : (layer.blendMode as any),
           });
         } else if (shapeLayer.shapeKind === 'line') {
@@ -358,7 +376,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
             opacity: layer.opacity,
             visible: layer.visible,
             draggable: activeTool === 'move' && !layer.locked,
-            listening: !layer.locked,
+            listening: layer.visible,
             globalCompositeOperation: layer.blendMode === 'normal' ? 'source-over' : (layer.blendMode as any),
           });
         }
@@ -393,7 +411,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
           opacity: layer.opacity,
           visible: layer.visible,
           draggable: activeTool === 'move' && !layer.locked,
-          listening: !layer.locked,
+          listening: layer.visible,
           globalCompositeOperation: layer.blendMode === 'normal' ? 'source-over' : (layer.blendMode as any),
         });
 
@@ -448,7 +466,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
             opacity: layer.opacity,
             visible: layer.visible,
             draggable: activeTool === 'move' && !layer.locked,
-            listening: !layer.locked,
+            listening: layer.visible,
             globalCompositeOperation: layer.blendMode === 'normal' ? 'source-over' : (layer.blendMode as any),
           });
 
@@ -489,10 +507,21 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
 
         // Selection on click
         node.on('mousedown tap', (e) => {
+          if (e.evt && 'button' in e.evt && (e.evt as MouseEvent).button === 2) {
+            return;
+          }
           if (activeTool === 'move') {
             e.cancelBubble = true;
             selectLayer(layer.id, e.evt.shiftKey || e.evt.ctrlKey || e.evt.metaKey);
           }
+        });
+
+        // Context menu on right click
+        node.on('contextmenu', (e) => {
+          e.evt.preventDefault();
+          e.cancelBubble = true;
+          contextMenuHandledRef.current = true;
+          openLayerMenu(layer.id, e.evt.clientX, e.evt.clientY, 'canvas');
         });
 
         // Record drag position start for undo
@@ -1428,7 +1457,22 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
         height: `${doc?.height || 600}px`,
         position: 'relative',
       }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        if (contextMenuHandledRef.current) {
+          contextMenuHandledRef.current = false;
+          return;
+        }
+        const stage = stageRef.current;
+        const pointerPos = stage?.getPointerPosition();
+        openCanvasMenu(
+          e.clientX,
+          e.clientY,
+          pointerPos ? { x: Math.round(pointerPos.x), y: Math.round(pointerPos.y) } : undefined
+        );
+      }}
       onMouseDown={(e) => {
+        if (e.button === 2) return;
         // Convert to stage pointer down
         const stage = stageRef.current;
         if (stage) {
@@ -1459,6 +1503,11 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
         }
       }}
       onTouchEnd={() => handleStagePointerUp()}
-    />
+    >
+      <EditorContextMenu
+        contextMenu={contextMenu}
+        onClose={closeMenu}
+      />
+    </div>
   );
 };

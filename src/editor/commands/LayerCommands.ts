@@ -264,3 +264,165 @@ export class UpdateLayerPropertiesCommand implements ICommand {
     }
   }
 }
+
+export class DuplicateLayerCommand implements ICommand {
+  id: string;
+  label: string;
+  private sourceLayerId: string;
+  private duplicatedLayer: Layer | null = null;
+  private insertIndex: number = 0;
+
+  constructor(sourceLayerId: string) {
+    this.id = `cmd-duplicate-layer-${nanoid(6)}`;
+    this.label = 'Duplicate Layer';
+    this.sourceLayerId = sourceLayerId;
+  }
+
+  execute(): void {
+    const { layers } = useLayerStore.getState();
+    const targetIndex = layers.findIndex((l) => l.id === this.sourceLayerId);
+    if (targetIndex === -1 && !this.duplicatedLayer) return;
+
+    if (!this.duplicatedLayer) {
+      const source = layers[targetIndex];
+      this.insertIndex = targetIndex;
+      this.duplicatedLayer = {
+        ...JSON.parse(JSON.stringify(source)),
+        id: nanoid(),
+        name: `${source.name} copy`,
+        x: source.x + 20,
+        y: source.y + 20,
+      };
+    }
+
+    if (!this.duplicatedLayer) return;
+
+    useLayerStore.getState().addLayer(this.duplicatedLayer, this.insertIndex);
+    const ctx = shouldBroadcast();
+    if (ctx) {
+      operationBridge.broadcast(
+        OperationFactory.addLayer(ctx.projectId, ctx.userId, this.duplicatedLayer, this.insertIndex)
+      );
+    }
+  }
+
+  undo(): void {
+    if (!this.duplicatedLayer) return;
+    useLayerStore.getState().removeLayer(this.duplicatedLayer.id);
+    const ctx = shouldBroadcast();
+    if (ctx) {
+      operationBridge.broadcast(
+        OperationFactory.deleteLayer(ctx.projectId, ctx.userId, this.duplicatedLayer.id)
+      );
+    }
+  }
+}
+
+export class ToggleVisibilityCommand implements ICommand {
+  id: string;
+  label: string;
+  private layerId: string;
+  private prevVisible: boolean;
+  private nextVisible: boolean;
+
+  constructor(layerId: string, prevVisible: boolean) {
+    this.id = `cmd-visibility-${nanoid(6)}`;
+    this.label = prevVisible ? 'Hide Layer' : 'Show Layer';
+    this.layerId = layerId;
+    this.prevVisible = prevVisible;
+    this.nextVisible = !prevVisible;
+  }
+
+  execute(): void {
+    useLayerStore.getState().updateLayer(this.layerId, { visible: this.nextVisible });
+    const ctx = shouldBroadcast();
+    if (ctx) {
+      operationBridge.broadcast(
+        OperationFactory.updateLayer(ctx.projectId, ctx.userId, this.layerId, { visible: this.nextVisible })
+      );
+    }
+  }
+
+  undo(): void {
+    useLayerStore.getState().updateLayer(this.layerId, { visible: this.prevVisible });
+    const ctx = shouldBroadcast();
+    if (ctx) {
+      operationBridge.broadcast(
+        OperationFactory.updateLayer(ctx.projectId, ctx.userId, this.layerId, { visible: this.prevVisible })
+      );
+    }
+  }
+}
+
+export class ToggleLockCommand implements ICommand {
+  id: string;
+  label: string;
+  private layerId: string;
+  private prevLocked: boolean;
+  private nextLocked: boolean;
+
+  constructor(layerId: string, prevLocked: boolean) {
+    this.id = `cmd-lock-${nanoid(6)}`;
+    this.label = prevLocked ? 'Unlock Layer' : 'Lock Layer';
+    this.layerId = layerId;
+    this.prevLocked = prevLocked;
+    this.nextLocked = !prevLocked;
+  }
+
+  execute(): void {
+    useLayerStore.getState().updateLayer(this.layerId, { locked: this.nextLocked });
+    const ctx = shouldBroadcast();
+    if (ctx) {
+      operationBridge.broadcast(
+        OperationFactory.updateLayer(ctx.projectId, ctx.userId, this.layerId, { locked: this.nextLocked })
+      );
+    }
+  }
+
+  undo(): void {
+    useLayerStore.getState().updateLayer(this.layerId, { locked: this.prevLocked });
+    const ctx = shouldBroadcast();
+    if (ctx) {
+      operationBridge.broadcast(
+        OperationFactory.updateLayer(ctx.projectId, ctx.userId, this.layerId, { locked: this.prevLocked })
+      );
+    }
+  }
+}
+
+export class RenameLayerCommand implements ICommand {
+  id: string;
+  label: string;
+  private layerId: string;
+  private prevName: string;
+  private newName: string;
+
+  constructor(layerId: string, prevName: string, newName: string) {
+    this.id = `cmd-rename-${nanoid(6)}`;
+    this.label = `Rename to "${newName}"`;
+    this.layerId = layerId;
+    this.prevName = prevName;
+    this.newName = newName;
+  }
+
+  execute(): void {
+    useLayerStore.getState().renameLayer(this.layerId, this.newName);
+    const ctx = shouldBroadcast();
+    if (ctx) {
+      operationBridge.broadcast(
+        OperationFactory.updateLayer(ctx.projectId, ctx.userId, this.layerId, { name: this.newName })
+      );
+    }
+  }
+
+  undo(): void {
+    useLayerStore.getState().renameLayer(this.layerId, this.prevName);
+    const ctx = shouldBroadcast();
+    if (ctx) {
+      operationBridge.broadcast(
+        OperationFactory.updateLayer(ctx.projectId, ctx.userId, this.layerId, { name: this.prevName })
+      );
+    }
+  }
+}
+

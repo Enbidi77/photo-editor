@@ -36,6 +36,7 @@ import {
   resolveGradientStops,
   formatCssGradient,
   DEFAULT_GRADIENT_OPTIONS,
+  colorToHex,
 } from '@/lib/image/gradient';
 
 export const OptionsBar: React.FC = () => {
@@ -633,6 +634,150 @@ export const OptionsBar: React.FC = () => {
                     />
                   );
                 })}
+                {gradOpts.presetId === 'custom' && (
+                  <span
+                    style={{
+                      fontSize: '0.62rem',
+                      padding: '1px 5px',
+                      borderRadius: 2,
+                      backgroundColor: editorTokens.accent.primary,
+                      color: '#ffffff',
+                      fontWeight: 600,
+                      flexShrink: 0,
+                    }}
+                  >
+                    Custom
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Custom Color Stops */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ color: editorTokens.text.secondary }}>Colors:</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                {resolvedStops.map((stop, idx) => {
+                  const hexColor = colorToHex(stop.color);
+                  const isRemovable = resolvedStops.length > 2 && idx > 0 && idx < resolvedStops.length - 1;
+                  return (
+                    <div
+                      key={`grad-stop-${idx}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 2,
+                        backgroundColor: editorTokens.bg.input,
+                        padding: '1px 3px',
+                        borderRadius: 3,
+                        border: `1px solid ${editorTokens.border.subtle}`,
+                      }}
+                    >
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          cursor: 'pointer',
+                          position: 'relative',
+                        }}
+                        title={`Stop ${idx + 1}: ${stop.color} (${Math.round(stop.offset * 100)}%) - Click to choose custom color`}
+                      >
+                        <div
+                          style={{
+                            width: 18,
+                            height: 16,
+                            backgroundColor: stop.color,
+                            borderRadius: 2,
+                            border: `1px solid ${editorTokens.border.medium}`,
+                          }}
+                        />
+                        <input
+                          type="color"
+                          value={hexColor}
+                          onChange={(e) => {
+                            const newColor = e.target.value;
+                            const nextStops = resolvedStops.map((s, i) =>
+                              i === idx ? { ...s, color: newColor } : s
+                            );
+                            updateToolOptions('gradient', {
+                              presetId: 'custom',
+                              stops: nextStops,
+                            });
+                          }}
+                          style={{
+                            position: 'absolute',
+                            opacity: 0,
+                            width: 18,
+                            height: 16,
+                            cursor: 'pointer',
+                            top: 0,
+                            left: 0,
+                          }}
+                        />
+                      </label>
+
+                      {isRemovable && (
+                        <button
+                          type="button"
+                          title="Remove stop"
+                          onClick={() => {
+                            const nextStops = resolvedStops.filter((_, i) => i !== idx);
+                            updateToolOptions('gradient', {
+                              presetId: 'custom',
+                              stops: nextStops,
+                            });
+                          }}
+                          style={{
+                            backgroundColor: 'transparent',
+                            border: 'none',
+                            color: editorTokens.text.muted,
+                            cursor: 'pointer',
+                            padding: 0,
+                            fontSize: '0.7rem',
+                            lineHeight: 1,
+                          }}
+                        >
+                          &times;
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Add Stop Button */}
+                <button
+                  type="button"
+                  title="Add color stop to gradient"
+                  onClick={() => {
+                    const newOffset = resolvedStops.length >= 2
+                      ? Number(((resolvedStops[0].offset + resolvedStops[resolvedStops.length - 1].offset) / 2).toFixed(2))
+                      : 0.5;
+                    const nextStops = [
+                      ...resolvedStops,
+                      { offset: newOffset, color: foregroundColor || '#ffff00' },
+                    ].sort((a, b) => a.offset - b.offset);
+                    updateToolOptions('gradient', {
+                      presetId: 'custom',
+                      stops: nextStops,
+                    });
+                  }}
+                  style={{
+                    backgroundColor: editorTokens.bg.input,
+                    border: `1px dashed ${editorTokens.border.medium}`,
+                    color: editorTokens.text.secondary,
+                    borderRadius: 3,
+                    width: 18,
+                    height: 18,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                    lineHeight: 1,
+                    padding: 0,
+                  }}
+                >
+                  +
+                </button>
               </div>
             </div>
 

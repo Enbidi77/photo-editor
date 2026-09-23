@@ -221,6 +221,23 @@ export function parseColorToRgba(colorStr: string): [number, number, number, num
 }
 
 /**
+ * Converts any valid color string to a 6-digit hex string (#rrggbb) suitable for HTML color inputs
+ */
+export function colorToHex(colorStr: string): string {
+  if (!colorStr) return '#000000';
+  const trimmed = colorStr.trim().toLowerCase();
+  if (trimmed.startsWith('#') && trimmed.length === 7) {
+    return trimmed;
+  }
+  const [r, g, b] = parseColorToRgba(colorStr);
+  const hexR = r.toString(16).padStart(2, '0');
+  const hexG = g.toString(16).padStart(2, '0');
+  const hexB = b.toString(16).padStart(2, '0');
+  return `#${hexR}${hexG}${hexB}`;
+}
+
+
+/**
  * Builds a fast lookup table (1024 RGBA samples) for color stops
  */
 export function buildGradientLUT(

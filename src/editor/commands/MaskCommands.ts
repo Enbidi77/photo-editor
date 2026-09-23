@@ -114,3 +114,24 @@ export class ApplyMaskCommand implements ICommand {
     useLayerStore.getState().updateLayer(this.layerId, { mask: this.previousMask });
   }
 }
+
+export class ToggleMaskLinkedCommand implements ICommand {
+  id: string;
+  label: string;
+  private layerId: string;
+
+  constructor(layerId: string) {
+    this.id = `cmd-toggle-mask-linked-${nanoid(6)}`;
+    this.label = 'Toggle Mask Link';
+    this.layerId = layerId;
+  }
+
+  execute(): void {
+    useLayerStore.getState().toggleMaskLinked(this.layerId);
+  }
+
+  undo(): void {
+    useLayerStore.getState().toggleMaskLinked(this.layerId);
+  }
+}
+

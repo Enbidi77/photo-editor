@@ -258,7 +258,7 @@ export function maskToPolygon(mask: Uint8Array, width: number, height: number): 
   do {
     boundary.push({x: currX, y: currY});
     pointsAdded++;
-    
+      
     let nextDir = (backDir + 2) % 8; 
     let found = false;
     
