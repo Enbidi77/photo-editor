@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDocumentStore } from '@/store/documentStore';
 import { useLayerStore } from '@/store/layerStore';
@@ -15,7 +15,14 @@ import { CollaboratorAvatars } from '@/components/collaboration/CollaboratorAvat
 import { ShareDialog } from '@/components/collaboration/ShareDialog';
 import { PxfSerializer } from '@/editor/export/PxfSerializer';
 import { ImageLoader } from '@/lib/image/imageLoader';
-import { AddLayerCommand, DeleteLayerCommand } from '@/editor/commands/LayerCommands';
+import {
+  AddLayerCommand,
+  DeleteLayerCommand,
+  ReorderLayerCommand,
+  DuplicateLayerCommand,
+  ToggleVisibilityCommand,
+  ToggleLockCommand,
+} from '@/editor/commands/LayerCommands';
 import { AddMaskCommand, RemoveMaskCommand, ToggleMaskEnabledCommand, ApplyMaskCommand } from '@/editor/commands/MaskCommands';
 import { ImageLayer, DEFAULT_ADJUSTMENTS } from '@/types/layer';
 import { editorTokens } from '@/theme/palette';
@@ -26,7 +33,9 @@ import MenuItem from '@mui/material/MenuItem';
 import Typography from '@mui/material/Typography';
 import Divider from '@mui/material/Divider';
 import Button from '@mui/material/Button';
-import { Share2, LayoutDashboard } from 'lucide-react';
+import Tooltip from '@mui/material/Tooltip';
+import IconButton from '@mui/material/IconButton';
+import { Share2, LayoutDashboard, Undo2, Redo2 } from 'lucide-react';
 
 export const TopMenuBar: React.FC = () => {
   const router = useRouter();
@@ -34,6 +43,13 @@ export const TopMenuBar: React.FC = () => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const { userRole } = useCollaborationStore();
+
+  const [isMac, setIsMac] = useState(false);
+  useEffect(() => {
+    if (typeof navigator !== 'undefined') {
+      setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform || navigator.userAgent));
+    }
+  }, []);
 
   const { document: doc, closeDocument } = useDocumentStore();
   const {
@@ -288,6 +304,46 @@ export const TopMenuBar: React.FC = () => {
         >
           Help
         </button>
+
+        <div style={{ width: 1, height: 14, backgroundColor: editorTokens.border.subtle, margin: '0 4px' }} />
+
+        {/* Quick Undo / Redo */}
+        <Tooltip title={`Undo (${isMac ? 'Cmd+Z' : 'Ctrl+Z'})`}>
+          <span>
+            <IconButton
+              size="small"
+              disabled={!canUndo()}
+              onClick={() => undo()}
+              sx={{
+                color: canUndo() ? editorTokens.text.primary : editorTokens.text.muted,
+                p: 0.5,
+                width: 22,
+                height: 22,
+                '&:hover': { backgroundColor: editorTokens.bg.hoverRow },
+              }}
+            >
+              <Undo2 size={13} />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <Tooltip title={`Redo (${isMac ? 'Cmd+Shift+Z' : 'Ctrl+Shift+Z, Ctrl+Y'})`}>
+          <span>
+            <IconButton
+              size="small"
+              disabled={!canRedo()}
+              onClick={() => redo()}
+              sx={{
+                color: canRedo() ? editorTokens.text.primary : editorTokens.text.muted,
+                p: 0.5,
+                width: 22,
+                height: 22,
+                '&:hover': { backgroundColor: editorTokens.bg.hoverRow },
+              }}
+            >
+              <Redo2 size={13} />
+            </IconButton>
+          </span>
+        </Tooltip>
       </div>
 
       {/* Right Collaboration & Navigation Area */}
@@ -415,7 +471,7 @@ export const TopMenuBar: React.FC = () => {
             }}
           >
             <Typography variant="inherit" sx={{ flex: 1 }}>Undo</Typography>
-            <Typography variant="caption" sx={{ color: editorTokens.text.muted }}>Ctrl+Z</Typography>
+            <Typography variant="caption" sx={{ color: editorTokens.text.muted }}>{isMac ? 'Cmd+Z' : 'Ctrl+Z'}</Typography>
           </MenuItem>,
           <MenuItem
             key="redo"
@@ -426,7 +482,7 @@ export const TopMenuBar: React.FC = () => {
             }}
           >
             <Typography variant="inherit" sx={{ flex: 1 }}>Redo</Typography>
-            <Typography variant="caption" sx={{ color: editorTokens.text.muted }}>Ctrl+Shift+Z</Typography>
+            <Typography variant="caption" sx={{ color: editorTokens.text.muted }}>{isMac ? 'Cmd+Shift+Z' : 'Ctrl+Shift+Z'}</Typography>
           </MenuItem>,
           <Divider key="d3" sx={{ my: 0.5 }} />,
           <MenuItem
@@ -434,11 +490,14 @@ export const TopMenuBar: React.FC = () => {
             disabled={!activeLayerId}
             onClick={() => {
               handleMenuClose();
-              if (activeLayerId) duplicateLayer(activeLayerId);
+              if (activeLayerId) {
+                const cmd = new DuplicateLayerCommand(activeLayerId);
+                useHistoryStore.getState().executeCommand(cmd);
+              }
             }}
           >
             <Typography variant="inherit" sx={{ flex: 1 }}>Duplicate Layer</Typography>
-            <Typography variant="caption" sx={{ color: editorTokens.text.muted }}>Ctrl+J</Typography>
+            <Typography variant="caption" sx={{ color: editorTokens.text.muted }}>{isMac ? 'Cmd+J' : 'Ctrl+J'}</Typography>
           </MenuItem>,
           <MenuItem
             key="delete"
@@ -484,40 +543,60 @@ export const TopMenuBar: React.FC = () => {
         {activeMenu === 'layer' && [
           <MenuItem
             key="bring-front"
-            disabled={!activeLayerId}
+            disabled={!activeLayerId || layers[0]?.id === activeLayerId}
             onClick={() => {
               handleMenuClose();
-              if (activeLayerId) bringToFront(activeLayerId);
+              if (activeLayerId) {
+                const idx = layers.findIndex((l) => l.id === activeLayerId);
+                if (idx > 0) {
+                  useHistoryStore.getState().executeCommand(new ReorderLayerCommand(idx, 0));
+                }
+              }
             }}
           >
             <Typography variant="inherit">Bring to Front</Typography>
           </MenuItem>,
           <MenuItem
             key="bring-fwd"
-            disabled={!activeLayerId}
+            disabled={!activeLayerId || layers[0]?.id === activeLayerId}
             onClick={() => {
               handleMenuClose();
-              if (activeLayerId) bringForward(activeLayerId);
+              if (activeLayerId) {
+                const idx = layers.findIndex((l) => l.id === activeLayerId);
+                if (idx > 0) {
+                  useHistoryStore.getState().executeCommand(new ReorderLayerCommand(idx, idx - 1));
+                }
+              }
             }}
           >
             <Typography variant="inherit">Bring Forward</Typography>
           </MenuItem>,
           <MenuItem
             key="send-back"
-            disabled={!activeLayerId}
+            disabled={!activeLayerId || layers[layers.length - 1]?.id === activeLayerId}
             onClick={() => {
               handleMenuClose();
-              if (activeLayerId) sendToBack(activeLayerId);
+              if (activeLayerId) {
+                const idx = layers.findIndex((l) => l.id === activeLayerId);
+                if (idx !== -1 && idx < layers.length - 1) {
+                  useHistoryStore.getState().executeCommand(new ReorderLayerCommand(idx, layers.length - 1));
+                }
+              }
             }}
           >
             <Typography variant="inherit">Send to Back</Typography>
           </MenuItem>,
           <MenuItem
             key="send-bwd"
-            disabled={!activeLayerId}
+            disabled={!activeLayerId || layers[layers.length - 1]?.id === activeLayerId}
             onClick={() => {
               handleMenuClose();
-              if (activeLayerId) sendBackward(activeLayerId);
+              if (activeLayerId) {
+                const idx = layers.findIndex((l) => l.id === activeLayerId);
+                if (idx !== -1 && idx < layers.length - 1) {
+                  useHistoryStore.getState().executeCommand(new ReorderLayerCommand(idx, idx + 1));
+                }
+              }
             }}
           >
             <Typography variant="inherit">Send Backward</Typography>
@@ -528,7 +607,9 @@ export const TopMenuBar: React.FC = () => {
             disabled={!activeLayerId}
             onClick={() => {
               handleMenuClose();
-              if (activeLayerId) toggleVisibility(activeLayerId);
+              if (activeLayer) {
+                useHistoryStore.getState().executeCommand(new ToggleVisibilityCommand(activeLayer.id, activeLayer.visible));
+              }
             }}
           >
             <Typography variant="inherit">Toggle Visibility</Typography>
@@ -538,7 +619,9 @@ export const TopMenuBar: React.FC = () => {
             disabled={!activeLayerId}
             onClick={() => {
               handleMenuClose();
-              if (activeLayerId) toggleLock(activeLayerId);
+              if (activeLayer) {
+                useHistoryStore.getState().executeCommand(new ToggleLockCommand(activeLayer.id, activeLayer.locked));
+              }
             }}
           >
             <Typography variant="inherit">Toggle Lock</Typography>

@@ -1,6 +1,7 @@
 import { PixelForgeProject } from '@/types/project';
 import { useDocumentStore } from '@/store/documentStore';
 import { useLayerStore } from '@/store/layerStore';
+import { useHistoryStore } from '@/store/historyStore';
 import { saveAs } from 'file-saver';
 
 export class PxfSerializer {
@@ -49,6 +50,7 @@ export class PxfSerializer {
 
     useDocumentStore.getState().setDocument(project.document);
     useLayerStore.getState().setLayers(project.layers);
+    useHistoryStore.getState().clearHistory('Open Project');
   }
 
   /**

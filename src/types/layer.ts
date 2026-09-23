@@ -22,6 +22,7 @@ export interface MaskData {
   enabled: boolean;   // whether mask is actively applied to rendering
   linked: boolean;    // whether mask moves with the layer
   dataUrl: string;    // grayscale image data (white = visible, black = hidden)
+  inverted?: boolean; // whether mask values are inverted
 }
 
 export const DEFAULT_MASK_DATA: MaskData = {

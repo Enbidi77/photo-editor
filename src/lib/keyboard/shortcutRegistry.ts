@@ -66,12 +66,23 @@ export const SHORTCUT_REGISTRY: ShortcutDef[] = [
 
 export function isFormInputElement(target: EventTarget | null): boolean {
   if (!target || !(target instanceof HTMLElement)) return false;
+  if (
+    target.closest?.(
+      'input, textarea, select, [contenteditable], [contenteditable="true"], .MuiInputBase-input'
+    )
+  ) {
+    return true;
+  }
   const tagName = target.tagName.toLowerCase();
+  const ceAttr = target.getAttribute?.('contenteditable');
   return (
     tagName === 'input' ||
     tagName === 'textarea' ||
     tagName === 'select' ||
-    target.isContentEditable ||
+    Boolean(target.isContentEditable) ||
+    target.contentEditable === 'true' ||
+    ceAttr === 'true' ||
+    ceAttr === '' ||
     target.classList.contains('MuiInputBase-input')
   );
 }

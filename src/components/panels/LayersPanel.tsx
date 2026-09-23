@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useLayerStore } from '@/store/layerStore';
 import { useHistoryStore } from '@/store/historyStore';
 import { useDocumentStore } from '@/store/documentStore';
@@ -16,6 +16,11 @@ import {
   DeleteLayerCommand,
   ChangeOpacityCommand,
   ChangeBlendModeCommand,
+  RenameLayerCommand,
+  ToggleVisibilityCommand,
+  ToggleLockCommand,
+  ReorderLayerCommand,
+  DuplicateLayerCommand,
 } from '@/editor/commands/LayerCommands';
 import { editorTokens } from '@/theme/palette';
 import { EditorContextMenu } from '@/components/common/EditorContextMenu';
@@ -77,6 +82,7 @@ export const LayersPanel: React.FC = () => {
     duplicateLayer,
     bringForward,
     sendBackward,
+    setLayerOpacity,
   } = useLayerStore();
   const { executeCommand } = useHistoryStore();
   const { document: doc } = useDocumentStore();
@@ -87,12 +93,25 @@ export const LayersPanel: React.FC = () => {
 
   const activeLayer = layers.find((l) => l.id === activeLayerId);
 
-  const handleOpacityChange = (val: number) => {
+  const initialOpacityRef = useRef<number | null>(null);
+
+  const handleOpacityPreview = (val: number) => {
     if (!activeLayer) return;
-    const prev = activeLayer.opacity;
+    if (initialOpacityRef.current === null) {
+      initialOpacityRef.current = activeLayer.opacity;
+    }
+    setLayerOpacity(activeLayer.id, val / 100);
+  };
+
+  const handleOpacityCommitted = (val: number) => {
+    if (!activeLayer) return;
+    const prev = initialOpacityRef.current ?? activeLayer.opacity;
     const next = val / 100;
-    const cmd = new ChangeOpacityCommand(activeLayer.id, prev, next);
-    executeCommand(cmd);
+    initialOpacityRef.current = null;
+    if (Math.abs(prev - next) > 0.001) {
+      const cmd = new ChangeOpacityCommand(activeLayer.id, prev, next);
+      executeCommand(cmd);
+    }
   };
 
   const handleBlendChange = (val: BlendMode) => {
@@ -142,7 +161,10 @@ export const LayersPanel: React.FC = () => {
 
   const commitRenaming = () => {
     if (editingLayerId && editingName.trim()) {
-      renameLayer(editingLayerId, editingName.trim());
+      const layer = layers.find((l) => l.id === editingLayerId);
+      if (layer && layer.name !== editingName.trim()) {
+        executeCommand(new RenameLayerCommand(editingLayerId, layer.name, editingName.trim()));
+      }
     }
     setEditingLayerId(null);
   };
@@ -208,7 +230,8 @@ export const LayersPanel: React.FC = () => {
             min={0}
             max={100}
             disabled={!activeLayer}
-            onChange={(_, val) => handleOpacityChange(val as number)}
+            onChange={(_, val) => handleOpacityPreview(val as number)}
+            onChangeCommitted={(_, val) => handleOpacityCommitted(val as number)}
             sx={{ flex: 1 }}
           />
           <span style={{ minWidth: 32, textAlign: 'right', fontSize: '0.7rem' }}>
@@ -272,7 +295,7 @@ export const LayersPanel: React.FC = () => {
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    toggleVisibility(layer.id);
+                    executeCommand(new ToggleVisibilityCommand(layer.id, layer.visible));
                   }}
                   style={{
                     backgroundColor: 'transparent',
@@ -292,7 +315,7 @@ export const LayersPanel: React.FC = () => {
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    toggleLock(layer.id);
+                    executeCommand(new ToggleLockCommand(layer.id, layer.locked));
                   }}
                   style={{
                     backgroundColor: 'transparent',
@@ -410,7 +433,13 @@ export const LayersPanel: React.FC = () => {
               <button
                 type="button"
                 disabled={!activeLayerId || layers[0]?.id === activeLayerId}
-                onClick={() => activeLayerId && bringForward(activeLayerId)}
+                onClick={() => {
+                  if (!activeLayerId) return;
+                  const idx = layers.findIndex((l) => l.id === activeLayerId);
+                  if (idx > 0) {
+                    executeCommand(new ReorderLayerCommand(idx, idx - 1));
+                  }
+                }}
                 style={{
                   backgroundColor: 'transparent',
                   border: 'none',
@@ -429,7 +458,13 @@ export const LayersPanel: React.FC = () => {
               <button
                 type="button"
                 disabled={!activeLayerId || layers[layers.length - 1]?.id === activeLayerId}
-                onClick={() => activeLayerId && sendBackward(activeLayerId)}
+                onClick={() => {
+                  if (!activeLayerId) return;
+                  const idx = layers.findIndex((l) => l.id === activeLayerId);
+                  if (idx !== -1 && idx < layers.length - 1) {
+                    executeCommand(new ReorderLayerCommand(idx, idx + 1));
+                  }
+                }}
                 style={{
                   backgroundColor: 'transparent',
                   border: 'none',
@@ -452,7 +487,11 @@ export const LayersPanel: React.FC = () => {
               <button
                 type="button"
                 disabled={!activeLayerId}
-                onClick={() => activeLayerId && duplicateLayer(activeLayerId)}
+                onClick={() => {
+                  if (activeLayerId) {
+                    executeCommand(new DuplicateLayerCommand(activeLayerId));
+                  }
+                }}
                 style={{
                   backgroundColor: 'transparent',
                   border: 'none',

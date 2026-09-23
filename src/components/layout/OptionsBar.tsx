@@ -30,7 +30,7 @@ import {
   Square,
 } from 'lucide-react';
 import { useHistoryStore } from '@/store/historyStore';
-import { UpdateLayerPropertiesCommand } from '@/editor/commands/LayerCommands';
+import { TransformLayerCommand, UpdateLayerPropertiesCommand } from '@/editor/commands/LayerCommands';
 import { PathLayer } from '@/types/layer';
 import Slider from '@mui/material/Slider';
 import Select from '@mui/material/Select';
@@ -67,7 +67,43 @@ export const OptionsBar: React.FC = () => {
     if (type === 'middle') nextY = Math.round((doc.height - activeLayer.height) / 2);
     if (type === 'bottom') nextY = doc.height - activeLayer.height;
 
-    updateLayer(activeLayer.id, { x: nextX, y: nextY });
+    executeCommand(
+      new TransformLayerCommand(
+        activeLayer.id,
+        {
+          x: activeLayer.x,
+          y: activeLayer.y,
+          width: activeLayer.width,
+          height: activeLayer.height,
+          scaleX: activeLayer.scaleX,
+          scaleY: activeLayer.scaleY,
+          rotation: activeLayer.rotation,
+        },
+        {
+          x: nextX,
+          y: nextY,
+          width: activeLayer.width,
+          height: activeLayer.height,
+          scaleX: activeLayer.scaleX,
+          scaleY: activeLayer.scaleY,
+          rotation: activeLayer.rotation,
+        },
+        `Align Layer ${type.charAt(0).toUpperCase() + type.slice(1)}`
+      )
+    );
+  };
+
+  const updatePathLayer = (patch: Partial<PathLayer>, label: string) => {
+    if (!activeLayer || activeLayer.type !== 'PATH') return;
+    const current = activeLayer as PathLayer;
+    executeCommand(
+      new UpdateLayerPropertiesCommand(
+        activeLayer.id,
+        current,
+        { ...current, ...patch },
+        label
+      )
+    );
   };
 
   return (
@@ -973,7 +1009,7 @@ export const OptionsBar: React.FC = () => {
                   const val = e.target.checked;
                   updateToolOptions('pen', { strokeEnabled: val });
                   if (activeLayer?.type === 'PATH') {
-                    updateLayer(activeLayer.id, { stroke: val ? options.pen.stroke : 'none' });
+                    updatePathLayer({ stroke: val ? options.pen.stroke : 'none' }, 'Toggle Path Stroke');
                   }
                 }}
                 style={{ width: 12, height: 12 }}
@@ -998,7 +1034,7 @@ export const OptionsBar: React.FC = () => {
                   const color = (e.target as HTMLInputElement).value;
                   updateToolOptions('pen', { stroke: color });
                   if (activeLayer?.type === 'PATH') {
-                    updateLayer(activeLayer.id, { stroke: color });
+                    updatePathLayer({ stroke: color }, 'Change Path Stroke Color');
                   }
                 };
                 input.click();
@@ -1013,7 +1049,7 @@ export const OptionsBar: React.FC = () => {
                 const w = Math.max(1, parseInt(e.target.value) || 1);
                 updateToolOptions('pen', { strokeWidth: w });
                 if (activeLayer?.type === 'PATH') {
-                  updateLayer(activeLayer.id, { strokeWidth: w });
+                  updatePathLayer({ strokeWidth: w }, 'Change Path Stroke Width');
                 }
               }}
               style={{
@@ -1042,7 +1078,7 @@ export const OptionsBar: React.FC = () => {
                   const val = e.target.checked;
                   updateToolOptions('pen', { fillEnabled: val });
                   if (activeLayer?.type === 'PATH') {
-                    updateLayer(activeLayer.id, { fill: val ? options.pen.fill : 'none' });
+                    updatePathLayer({ fill: val ? options.pen.fill : 'none' }, 'Toggle Path Fill');
                   }
                 }}
                 style={{ width: 12, height: 12 }}
@@ -1069,7 +1105,7 @@ export const OptionsBar: React.FC = () => {
                   const color = (e.target as HTMLInputElement).value;
                   updateToolOptions('pen', { fill: color });
                   if (activeLayer?.type === 'PATH') {
-                    updateLayer(activeLayer.id, { fill: color });
+                    updatePathLayer({ fill: color }, 'Change Path Fill Color');
                   }
                 };
                 input.click();

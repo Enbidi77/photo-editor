@@ -11,7 +11,7 @@ import { useLayerStore } from '@/store/layerStore';
 import { useSelectionStore } from '@/store/selectionStore';
 import { isFormInputElement } from '@/lib/keyboard/shortcutRegistry';
 import { PxfSerializer } from '@/editor/export/PxfSerializer';
-import { DeleteLayerCommand } from '@/editor/commands/LayerCommands';
+import { DeleteLayerCommand, DuplicateLayerCommand } from '@/editor/commands/LayerCommands';
 import { AddMaskCommand } from '@/editor/commands/MaskCommands';
 import { TopMenuBar } from './TopMenuBar';
 import { OptionsBar } from './OptionsBar';
@@ -109,6 +109,7 @@ export const EditorShell: React.FC = () => {
       // Undo / Redo
       if (isCtrlOrCmd && key === 'z') {
         e.preventDefault();
+        if (userRole === 'viewer') return;
         if (e.shiftKey) {
           redo();
         } else {
@@ -118,6 +119,7 @@ export const EditorShell: React.FC = () => {
       }
       if (isCtrlOrCmd && key === 'y') {
         e.preventDefault();
+        if (userRole === 'viewer') return;
         redo();
         return;
       }
@@ -148,7 +150,8 @@ export const EditorShell: React.FC = () => {
       if (isCtrlOrCmd && key === 'j') {
         e.preventDefault();
         if (activeLayerId) {
-          duplicateLayer(activeLayerId);
+          const cmd = new DuplicateLayerCommand(activeLayerId);
+          useHistoryStore.getState().executeCommand(cmd);
           showToast('Layer duplicated', 'info');
         }
         return;

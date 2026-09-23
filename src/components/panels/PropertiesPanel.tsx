@@ -1,14 +1,16 @@
 'use client';
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { useDocumentStore } from '@/store/documentStore';
 import { useLayerStore } from '@/store/layerStore';
 import { useHistoryStore } from '@/store/historyStore';
-import { Layer, ImageLayer, TextLayer, ShapeLayer, PathLayer, DEFAULT_ADJUSTMENTS } from '@/types/layer';
+import { Layer, ImageLayer, TextLayer, ShapeLayer, PathLayer, ImageAdjustments, DEFAULT_ADJUSTMENTS } from '@/types/layer';
 import { pathToSelection } from '@/lib/vector/bezier';
 import { useSelectionStore } from '@/store/selectionStore';
 import { SquareDashed } from 'lucide-react';
 import { UpdateLayerPropertiesCommand } from '@/editor/commands/LayerCommands';
+import { ApplyAdjustmentsCommand } from '@/editor/commands/FilterCommands';
+import { ResizeDocumentCommand } from '@/editor/commands/DocumentCommands';
 import { editorTokens } from '@/theme/palette';
 import {
   GRADIENT_PRESETS,
@@ -38,6 +40,45 @@ export const PropertiesPanel: React.FC = () => {
     if (!activeLayer) return;
     const cmd = new UpdateLayerPropertiesCommand(activeLayer.id, activeLayer, { ...activeLayer, ...patch }, label);
     executeCommand(cmd);
+  };
+
+  const handleDocumentChange = (patch: Partial<any>, label = 'Resize Canvas') => {
+    if (!doc) return;
+    const prevDoc = { ...doc };
+    const nextDoc = { ...doc, ...patch, updatedAt: Date.now(), isDirty: true };
+    executeCommand(new ResizeDocumentCommand(prevDoc, nextDoc, label));
+  };
+
+  const initialAdjustmentsRef = useRef<ImageAdjustments | null>(null);
+
+  const handleAdjustmentPreview = (patch: Partial<ImageAdjustments>) => {
+    if (!activeLayer || activeLayer.type !== 'IMAGE') return;
+    const imgLayer = activeLayer as ImageLayer;
+    if (initialAdjustmentsRef.current === null) {
+      initialAdjustmentsRef.current = { ...imgLayer.adjustments };
+    }
+    updateLayer(activeLayer.id, {
+      adjustments: { ...imgLayer.adjustments, ...patch },
+    });
+  };
+
+  const handleAdjustmentCommitted = (patch: Partial<ImageAdjustments>, label = 'Adjust Image') => {
+    if (!activeLayer || activeLayer.type !== 'IMAGE') return;
+    const imgLayer = activeLayer as ImageLayer;
+    const prev = initialAdjustmentsRef.current ?? { ...imgLayer.adjustments };
+    const next = { ...imgLayer.adjustments, ...patch };
+    initialAdjustmentsRef.current = null;
+    if (JSON.stringify(prev) !== JSON.stringify(next)) {
+      executeCommand(new ApplyAdjustmentsCommand(activeLayer.id, prev, next, label));
+    }
+  };
+
+  const handleAdjustmentToggle = (key: keyof ImageAdjustments, checked: boolean, label: string) => {
+    if (!activeLayer || activeLayer.type !== 'IMAGE') return;
+    const imgLayer = activeLayer as ImageLayer;
+    const prev = { ...imgLayer.adjustments };
+    const next = { ...imgLayer.adjustments, [key]: checked };
+    executeCommand(new ApplyAdjustmentsCommand(activeLayer.id, prev, next, label));
   };
 
   const sectionHeaderSx = {
@@ -117,14 +158,14 @@ export const PropertiesPanel: React.FC = () => {
               <input
                 type="number"
                 value={doc.width}
-                onChange={(e) => updateDocument({ width: parseInt(e.target.value) || 800 })}
+                onChange={(e) => handleDocumentChange({ width: parseInt(e.target.value) || 800 }, 'Resize Width')}
                 style={inputNumberSx}
               />
               <span>×</span>
               <input
                 type="number"
                 value={doc.height}
-                onChange={(e) => updateDocument({ height: parseInt(e.target.value) || 600 })}
+                onChange={(e) => handleDocumentChange({ height: parseInt(e.target.value) || 600 }, 'Resize Height')}
                 style={inputNumberSx}
               />
               <span>px</span>
@@ -137,7 +178,7 @@ export const PropertiesPanel: React.FC = () => {
               <input
                 type="number"
                 value={doc.resolution}
-                onChange={(e) => updateDocument({ resolution: parseInt(e.target.value) || 72 })}
+                onChange={(e) => handleDocumentChange({ resolution: parseInt(e.target.value) || 72 }, 'Change Resolution')}
                 style={inputNumberSx}
               />
               <span>ppi</span>
@@ -160,7 +201,7 @@ export const PropertiesPanel: React.FC = () => {
                   const input = document.createElement('input');
                   input.type = 'color';
                   input.value = doc.backgroundColor === 'transparent' ? '#ffffff' : doc.backgroundColor;
-                  input.onchange = (e) => updateDocument({ backgroundColor: (e.target as HTMLInputElement).value });
+                  input.onchange = (e) => handleDocumentChange({ backgroundColor: (e.target as HTMLInputElement).value }, 'Change Canvas Color');
                   input.click();
                 }}
               />
@@ -168,9 +209,9 @@ export const PropertiesPanel: React.FC = () => {
                 size="small"
                 variant="outlined"
                 onClick={() =>
-                  updateDocument({
+                  handleDocumentChange({
                     backgroundColor: doc.backgroundColor === 'transparent' ? '#ffffff' : 'transparent',
-                  })
+                  }, 'Toggle Canvas Transparency')
                 }
                 sx={{ fontSize: '0.65rem', padding: '1px 6px', minHeight: 20 }}
               >
@@ -930,14 +971,8 @@ export const PropertiesPanel: React.FC = () => {
                   value={Math.round((activeLayer as ImageLayer).adjustments.brightness * 100)}
                   min={-100}
                   max={100}
-                  onChange={(_, val) =>
-                    updateLayer(activeLayer.id, {
-                      adjustments: {
-                        ...(activeLayer as ImageLayer).adjustments,
-                        brightness: (val as number) / 100,
-                      },
-                    })
-                  }
+                  onChange={(_, val) => handleAdjustmentPreview({ brightness: (val as number) / 100 })}
+                  onChangeCommitted={(_, val) => handleAdjustmentCommitted({ brightness: (val as number) / 100 }, 'Adjust Brightness')}
                   sx={{ flex: 1 }}
                 />
                 <span style={{ width: 28, textAlign: 'right' }}>
@@ -952,14 +987,8 @@ export const PropertiesPanel: React.FC = () => {
                   value={(activeLayer as ImageLayer).adjustments.contrast}
                   min={-100}
                   max={100}
-                  onChange={(_, val) =>
-                    updateLayer(activeLayer.id, {
-                      adjustments: {
-                        ...(activeLayer as ImageLayer).adjustments,
-                        contrast: val as number,
-                      },
-                    })
-                  }
+                  onChange={(_, val) => handleAdjustmentPreview({ contrast: val as number })}
+                  onChangeCommitted={(_, val) => handleAdjustmentCommitted({ contrast: val as number }, 'Adjust Contrast')}
                   sx={{ flex: 1 }}
                 />
                 <span style={{ width: 28, textAlign: 'right' }}>
@@ -974,14 +1003,8 @@ export const PropertiesPanel: React.FC = () => {
                   value={(activeLayer as ImageLayer).adjustments.blur}
                   min={0}
                   max={40}
-                  onChange={(_, val) =>
-                    updateLayer(activeLayer.id, {
-                      adjustments: {
-                        ...(activeLayer as ImageLayer).adjustments,
-                        blur: val as number,
-                      },
-                    })
-                  }
+                  onChange={(_, val) => handleAdjustmentPreview({ blur: val as number })}
+                  onChangeCommitted={(_, val) => handleAdjustmentCommitted({ blur: val as number }, 'Adjust Blur')}
                   sx={{ flex: 1 }}
                 />
                 <span style={{ width: 28, textAlign: 'right' }}>
@@ -996,14 +1019,8 @@ export const PropertiesPanel: React.FC = () => {
                   value={Math.round((activeLayer as ImageLayer).adjustments.noise * 100)}
                   min={0}
                   max={100}
-                  onChange={(_, val) =>
-                    updateLayer(activeLayer.id, {
-                      adjustments: {
-                        ...(activeLayer as ImageLayer).adjustments,
-                        noise: (val as number) / 100,
-                      },
-                    })
-                  }
+                  onChange={(_, val) => handleAdjustmentPreview({ noise: (val as number) / 100 })}
+                  onChangeCommitted={(_, val) => handleAdjustmentCommitted({ noise: (val as number) / 100 }, 'Adjust Noise')}
                   sx={{ flex: 1 }}
                 />
                 <span style={{ width: 28, textAlign: 'right' }}>
@@ -1019,14 +1036,8 @@ export const PropertiesPanel: React.FC = () => {
                   min={0}
                   max={30}
                   step={2}
-                  onChange={(_, val) =>
-                    updateLayer(activeLayer.id, {
-                      adjustments: {
-                        ...(activeLayer as ImageLayer).adjustments,
-                        pixelate: val as number,
-                      },
-                    })
-                  }
+                  onChange={(_, val) => handleAdjustmentPreview({ pixelate: val as number })}
+                  onChangeCommitted={(_, val) => handleAdjustmentCommitted({ pixelate: val as number }, 'Adjust Pixelate')}
                   sx={{ flex: 1 }}
                 />
                 <span style={{ width: 28, textAlign: 'right' }}>
@@ -1041,14 +1052,7 @@ export const PropertiesPanel: React.FC = () => {
                     <Switch
                       size="small"
                       checked={(activeLayer as ImageLayer).adjustments.grayscale}
-                      onChange={(e) =>
-                        updateLayer(activeLayer.id, {
-                          adjustments: {
-                            ...(activeLayer as ImageLayer).adjustments,
-                            grayscale: e.target.checked,
-                          },
-                        })
-                      }
+                      onChange={(e) => handleAdjustmentToggle('grayscale', e.target.checked, 'Toggle Grayscale')}
                     />
                   }
                   label="Grayscale"
@@ -1059,14 +1063,7 @@ export const PropertiesPanel: React.FC = () => {
                     <Switch
                       size="small"
                       checked={(activeLayer as ImageLayer).adjustments.sepia}
-                      onChange={(e) =>
-                        updateLayer(activeLayer.id, {
-                          adjustments: {
-                            ...(activeLayer as ImageLayer).adjustments,
-                            sepia: e.target.checked,
-                          },
-                        })
-                      }
+                      onChange={(e) => handleAdjustmentToggle('sepia', e.target.checked, 'Toggle Sepia')}
                     />
                   }
                   label="Sepia"
@@ -1077,14 +1074,7 @@ export const PropertiesPanel: React.FC = () => {
                     <Switch
                       size="small"
                       checked={(activeLayer as ImageLayer).adjustments.invert}
-                      onChange={(e) =>
-                        updateLayer(activeLayer.id, {
-                          adjustments: {
-                            ...(activeLayer as ImageLayer).adjustments,
-                            invert: e.target.checked,
-                          },
-                        })
-                      }
+                      onChange={(e) => handleAdjustmentToggle('invert', e.target.checked, 'Toggle Invert')}
                     />
                   }
                   label="Invert"

@@ -3,6 +3,10 @@ import { useLayerStore } from '@/store/layerStore';
 import { ImageAdjustments, ImageLayer } from '@/types/layer';
 import { nanoid } from 'nanoid';
 
+function layerExists(layerId: string): boolean {
+  return useLayerStore.getState().layers.some((l) => l.id === layerId);
+}
+
 export class ApplyAdjustmentsCommand implements ICommand {
   id: string;
   label: string;
@@ -23,13 +27,23 @@ export class ApplyAdjustmentsCommand implements ICommand {
     this.nextAdjustments = nextAdjustments;
   }
 
+  isNoOp(): boolean {
+    try {
+      return JSON.stringify(this.prevAdjustments) === JSON.stringify(this.nextAdjustments);
+    } catch {
+      return false;
+    }
+  }
+
   execute(): void {
+    if (!layerExists(this.layerId)) return;
     useLayerStore.getState().updateLayer<ImageLayer>(this.layerId, {
       adjustments: this.nextAdjustments,
     });
   }
 
   undo(): void {
+    if (!layerExists(this.layerId)) return;
     useLayerStore.getState().updateLayer<ImageLayer>(this.layerId, {
       adjustments: this.prevAdjustments,
     });

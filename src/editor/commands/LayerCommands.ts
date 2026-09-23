@@ -15,6 +15,10 @@ function shouldBroadcast(): { projectId: string; userId: string } | null {
   return { projectId, userId };
 }
 
+function layerExists(layerId: string): boolean {
+  return useLayerStore.getState().layers.some((l) => l.id === layerId);
+}
+
 export class AddLayerCommand implements ICommand {
   id: string;
   label: string;
@@ -29,6 +33,7 @@ export class AddLayerCommand implements ICommand {
   }
 
   execute(): void {
+    if (layerExists(this.layer.id)) return;
     useLayerStore.getState().addLayer(this.layer, this.index);
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -39,6 +44,7 @@ export class AddLayerCommand implements ICommand {
   }
 
   undo(): void {
+    if (!layerExists(this.layer.id)) return;
     useLayerStore.getState().removeLayer(this.layer.id);
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -63,6 +69,7 @@ export class DeleteLayerCommand implements ICommand {
   }
 
   execute(): void {
+    if (!layerExists(this.layer.id)) return;
     useLayerStore.getState().removeLayer(this.layer.id);
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -73,6 +80,7 @@ export class DeleteLayerCommand implements ICommand {
   }
 
   undo(): void {
+    if (layerExists(this.layer.id)) return;
     useLayerStore.getState().addLayer(this.layer, Math.max(0, this.index));
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -83,26 +91,50 @@ export class DeleteLayerCommand implements ICommand {
   }
 }
 
+export interface TransformProps {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  scaleX?: number;
+  scaleY?: number;
+}
+
 export class TransformLayerCommand implements ICommand {
   id: string;
   label: string;
   private layerId: string;
-  private prevTransform: { x: number; y: number; width: number; height: number; rotation: number; scaleX?: number; scaleY?: number };
-  private newTransform: { x: number; y: number; width: number; height: number; rotation: number; scaleX?: number; scaleY?: number };
+  private prevTransform: TransformProps;
+  private newTransform: TransformProps;
 
   constructor(
     layerId: string,
-    prevTransform: { x: number; y: number; width: number; height: number; rotation: number; scaleX?: number; scaleY?: number },
-    newTransform: { x: number; y: number; width: number; height: number; rotation: number; scaleX?: number; scaleY?: number }
+    prevTransform: TransformProps,
+    newTransform: TransformProps,
+    label = 'Free Transform'
   ) {
     this.id = `cmd-transform-${nanoid(6)}`;
-    this.label = 'Free Transform';
+    this.label = label;
     this.layerId = layerId;
     this.prevTransform = prevTransform;
     this.newTransform = newTransform;
   }
 
+  isNoOp(): boolean {
+    return (
+      this.prevTransform.x === this.newTransform.x &&
+      this.prevTransform.y === this.newTransform.y &&
+      this.prevTransform.width === this.newTransform.width &&
+      this.prevTransform.height === this.newTransform.height &&
+      this.prevTransform.rotation === this.newTransform.rotation &&
+      (this.prevTransform.scaleX ?? 1) === (this.newTransform.scaleX ?? 1) &&
+      (this.prevTransform.scaleY ?? 1) === (this.newTransform.scaleY ?? 1)
+    );
+  }
+
   execute(): void {
+    if (!layerExists(this.layerId)) return;
     useLayerStore.getState().updateLayer(this.layerId, this.newTransform);
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -113,6 +145,7 @@ export class TransformLayerCommand implements ICommand {
   }
 
   undo(): void {
+    if (!layerExists(this.layerId)) return;
     useLayerStore.getState().updateLayer(this.layerId, this.prevTransform);
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -138,7 +171,12 @@ export class ChangeOpacityCommand implements ICommand {
     this.newOpacity = newOpacity;
   }
 
+  isNoOp(): boolean {
+    return Math.abs(this.prevOpacity - this.newOpacity) < 0.001;
+  }
+
   execute(): void {
+    if (!layerExists(this.layerId)) return;
     useLayerStore.getState().setLayerOpacity(this.layerId, this.newOpacity);
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -149,6 +187,7 @@ export class ChangeOpacityCommand implements ICommand {
   }
 
   undo(): void {
+    if (!layerExists(this.layerId)) return;
     useLayerStore.getState().setLayerOpacity(this.layerId, this.prevOpacity);
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -174,7 +213,12 @@ export class ChangeBlendModeCommand implements ICommand {
     this.newBlend = newBlend;
   }
 
+  isNoOp(): boolean {
+    return this.prevBlend === this.newBlend;
+  }
+
   execute(): void {
+    if (!layerExists(this.layerId)) return;
     useLayerStore.getState().setLayerBlendMode(this.layerId, this.newBlend);
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -185,6 +229,7 @@ export class ChangeBlendModeCommand implements ICommand {
   }
 
   undo(): void {
+    if (!layerExists(this.layerId)) return;
     useLayerStore.getState().setLayerBlendMode(this.layerId, this.prevBlend);
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -206,6 +251,10 @@ export class ReorderLayerCommand implements ICommand {
     this.label = 'Reorder Layer';
     this.startIndex = startIndex;
     this.endIndex = endIndex;
+  }
+
+  isNoOp(): boolean {
+    return this.startIndex === this.endIndex;
   }
 
   execute(): void {
@@ -244,7 +293,16 @@ export class UpdateLayerPropertiesCommand implements ICommand {
     this.nextProps = nextProps;
   }
 
+  isNoOp(): boolean {
+    try {
+      return JSON.stringify(this.prevProps) === JSON.stringify(this.nextProps);
+    } catch {
+      return false;
+    }
+  }
+
   execute(): void {
+    if (!layerExists(this.layerId)) return;
     useLayerStore.getState().updateLayer(this.layerId, this.nextProps);
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -255,6 +313,7 @@ export class UpdateLayerPropertiesCommand implements ICommand {
   }
 
   undo(): void {
+    if (!layerExists(this.layerId)) return;
     useLayerStore.getState().updateLayer(this.layerId, this.prevProps);
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -270,7 +329,7 @@ export class DuplicateLayerCommand implements ICommand {
   label: string;
   private sourceLayerId: string;
   private duplicatedLayer: Layer | null = null;
-  private insertIndex: number = 0;
+  private insertIndex = 0;
 
   constructor(sourceLayerId: string) {
     this.id = `cmd-duplicate-layer-${nanoid(6)}`;
@@ -296,6 +355,7 @@ export class DuplicateLayerCommand implements ICommand {
     }
 
     if (!this.duplicatedLayer) return;
+    if (layerExists(this.duplicatedLayer.id)) return;
 
     useLayerStore.getState().addLayer(this.duplicatedLayer, this.insertIndex);
     const ctx = shouldBroadcast();
@@ -308,6 +368,7 @@ export class DuplicateLayerCommand implements ICommand {
 
   undo(): void {
     if (!this.duplicatedLayer) return;
+    if (!layerExists(this.duplicatedLayer.id)) return;
     useLayerStore.getState().removeLayer(this.duplicatedLayer.id);
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -333,7 +394,12 @@ export class ToggleVisibilityCommand implements ICommand {
     this.nextVisible = !prevVisible;
   }
 
+  isNoOp(): boolean {
+    return this.prevVisible === this.nextVisible;
+  }
+
   execute(): void {
+    if (!layerExists(this.layerId)) return;
     useLayerStore.getState().updateLayer(this.layerId, { visible: this.nextVisible });
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -344,6 +410,7 @@ export class ToggleVisibilityCommand implements ICommand {
   }
 
   undo(): void {
+    if (!layerExists(this.layerId)) return;
     useLayerStore.getState().updateLayer(this.layerId, { visible: this.prevVisible });
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -369,7 +436,12 @@ export class ToggleLockCommand implements ICommand {
     this.nextLocked = !prevLocked;
   }
 
+  isNoOp(): boolean {
+    return this.prevLocked === this.nextLocked;
+  }
+
   execute(): void {
+    if (!layerExists(this.layerId)) return;
     useLayerStore.getState().updateLayer(this.layerId, { locked: this.nextLocked });
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -380,6 +452,7 @@ export class ToggleLockCommand implements ICommand {
   }
 
   undo(): void {
+    if (!layerExists(this.layerId)) return;
     useLayerStore.getState().updateLayer(this.layerId, { locked: this.prevLocked });
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -405,7 +478,12 @@ export class RenameLayerCommand implements ICommand {
     this.newName = newName;
   }
 
+  isNoOp(): boolean {
+    return this.prevName === this.newName;
+  }
+
   execute(): void {
+    if (!layerExists(this.layerId)) return;
     useLayerStore.getState().renameLayer(this.layerId, this.newName);
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -416,6 +494,7 @@ export class RenameLayerCommand implements ICommand {
   }
 
   undo(): void {
+    if (!layerExists(this.layerId)) return;
     useLayerStore.getState().renameLayer(this.layerId, this.prevName);
     const ctx = shouldBroadcast();
     if (ctx) {
@@ -425,4 +504,3 @@ export class RenameLayerCommand implements ICommand {
     }
   }
 }
-

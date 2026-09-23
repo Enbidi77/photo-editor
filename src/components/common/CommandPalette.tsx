@@ -8,6 +8,7 @@ import { useViewStore } from '@/store/viewStore';
 import { useLayerStore } from '@/store/layerStore';
 import { useDocumentStore } from '@/store/documentStore';
 import { PxfSerializer } from '@/editor/export/PxfSerializer';
+import { DuplicateLayerCommand } from '@/editor/commands/LayerCommands';
 import { editorTokens } from '@/theme/palette';
 import Dialog from '@mui/material/Dialog';
 import { Search, Command as CmdIcon } from 'lucide-react';
@@ -38,7 +39,7 @@ export const CommandPalette: React.FC = () => {
     { id: 'export-img', label: 'Export Image As...', category: 'File', shortcut: 'Ctrl+Shift+E', perform: () => openDialog('export') },
     { id: 'undo', label: 'Undo Action', category: 'Edit', shortcut: 'Ctrl+Z', perform: () => undo() },
     { id: 'redo', label: 'Redo Action', category: 'Edit', shortcut: 'Ctrl+Shift+Z', perform: () => redo() },
-    { id: 'duplicate-layer', label: 'Duplicate Current Layer', category: 'Layer', shortcut: 'Ctrl+J', perform: () => { if (activeLayerId) duplicateLayer(activeLayerId); } },
+    { id: 'duplicate-layer', label: 'Duplicate Current Layer', category: 'Layer', shortcut: 'Ctrl+J', perform: () => { if (activeLayerId) useHistoryStore.getState().executeCommand(new DuplicateLayerCommand(activeLayerId)); } },
     { id: 'tool-move', label: 'Switch to Move Tool', category: 'Tools', shortcut: 'V', perform: () => setActiveTool('move') },
     { id: 'tool-brush', label: 'Switch to Brush Tool', category: 'Tools', shortcut: 'B', perform: () => setActiveTool('brush') },
     { id: 'tool-eraser', label: 'Switch to Eraser Tool', category: 'Tools', shortcut: 'E', perform: () => setActiveTool('eraser') },
