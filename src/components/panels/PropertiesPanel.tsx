@@ -4,7 +4,10 @@ import React from 'react';
 import { useDocumentStore } from '@/store/documentStore';
 import { useLayerStore } from '@/store/layerStore';
 import { useHistoryStore } from '@/store/historyStore';
-import { Layer, ImageLayer, TextLayer, ShapeLayer, DEFAULT_ADJUSTMENTS } from '@/types/layer';
+import { Layer, ImageLayer, TextLayer, ShapeLayer, PathLayer, DEFAULT_ADJUSTMENTS } from '@/types/layer';
+import { pathToSelection } from '@/lib/vector/bezier';
+import { useSelectionStore } from '@/store/selectionStore';
+import { SquareDashed } from 'lucide-react';
 import { UpdateLayerPropertiesCommand } from '@/editor/commands/LayerCommands';
 import { editorTokens } from '@/theme/palette';
 import {
@@ -734,6 +737,161 @@ export const PropertiesPanel: React.FC = () => {
                   <span>px</span>
                 </div>
               )}
+            </div>
+          );
+        })()}
+
+        {/* PATH LAYER PROPERTIES */}
+        {activeLayer.type === 'PATH' && (() => {
+          const pathLayer = activeLayer as PathLayer;
+          const hasFill = Boolean(pathLayer.fill && pathLayer.fill !== 'none');
+          const hasStroke = Boolean(pathLayer.stroke && pathLayer.stroke !== 'none');
+
+          return (
+            <div>
+              <div style={sectionHeaderSx}>Path Properties</div>
+
+              {/* Closed / Open Path toggle */}
+              <div style={rowSx}>
+                <span style={labelSx}>State:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ color: pathLayer.closed ? '#3fb950' : '#d29922', fontWeight: 600 }}>
+                    {pathLayer.closed ? 'Closed Path' : 'Open Path'}
+                  </span>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() =>
+                      handleUpdate(
+                        { closed: !pathLayer.closed } as Partial<PathLayer>,
+                        pathLayer.closed ? 'Open Path' : 'Close Path'
+                      )
+                    }
+                    sx={{ fontSize: '0.65rem', padding: '1px 6px', minHeight: 20 }}
+                  >
+                    {pathLayer.closed ? 'Open' : 'Close'}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Anchor point count */}
+              <div style={rowSx}>
+                <span style={labelSx}>Points:</span>
+                <span style={{ color: editorTokens.text.secondary }}>
+                  {pathLayer.points.length} anchor points
+                </span>
+              </div>
+
+              {/* Stroke */}
+              <div style={rowSx}>
+                <span style={labelSx}>Stroke:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    type="checkbox"
+                    checked={hasStroke}
+                    onChange={(e) =>
+                      handleUpdate(
+                        { stroke: e.target.checked ? '#0078d4' : 'none' } as Partial<PathLayer>,
+                        'Toggle Stroke'
+                      )
+                    }
+                    style={{ width: 12, height: 12 }}
+                  />
+                  {hasStroke && (
+                    <>
+                      <div
+                        style={{
+                          width: 20,
+                          height: 20,
+                          backgroundColor: pathLayer.stroke,
+                          border: '1px solid #ffffff',
+                          borderRadius: 2,
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => {
+                          const input = document.createElement('input');
+                          input.type = 'color';
+                          input.value = pathLayer.stroke || '#0078d4';
+                          input.onchange = (e) =>
+                            handleUpdate({ stroke: (e.target as HTMLInputElement).value } as Partial<PathLayer>);
+                          input.click();
+                        }}
+                      />
+                      <input
+                        type="number"
+                        value={pathLayer.strokeWidth ?? 2}
+                        min={1}
+                        max={50}
+                        onChange={(e) =>
+                          handleUpdate(
+                            { strokeWidth: Math.max(1, parseInt(e.target.value) || 1) } as Partial<PathLayer>,
+                            'Stroke Width'
+                          )
+                        }
+                        style={{ ...inputNumberSx, width: 40 }}
+                      />
+                      <span>px</span>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Fill */}
+              <div style={rowSx}>
+                <span style={labelSx}>Fill:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    type="checkbox"
+                    checked={hasFill}
+                    onChange={(e) =>
+                      handleUpdate(
+                        { fill: e.target.checked ? '#0078d4' : 'none' } as Partial<PathLayer>,
+                        'Toggle Fill'
+                      )
+                    }
+                    style={{ width: 12, height: 12 }}
+                  />
+                  {hasFill && (
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        backgroundColor: pathLayer.fill,
+                        border: '1px solid #ffffff',
+                        borderRadius: 2,
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => {
+                        const input = document.createElement('input');
+                        input.type = 'color';
+                        input.value = pathLayer.fill || '#0078d4';
+                        input.onchange = (e) =>
+                          handleUpdate({ fill: (e.target as HTMLInputElement).value } as Partial<PathLayer>);
+                        input.click();
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Convert Path to Selection */}
+              <div style={{ marginTop: 8 }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  fullWidth
+                  onClick={() => {
+                    const sel = pathToSelection(pathLayer.points, pathLayer.closed);
+                    if (sel) {
+                      useSelectionStore.getState().setSelection(sel);
+                    }
+                  }}
+                  startIcon={<SquareDashed size={13} />}
+                  sx={{ fontSize: '0.68rem', height: 24 }}
+                >
+                  Convert Path to Selection
+                </Button>
+              </div>
             </div>
           );
         })()}

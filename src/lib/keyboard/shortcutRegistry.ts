@@ -19,6 +19,7 @@ export const SHORTCUT_REGISTRY: ShortcutDef[] = [
   { key: 'b', actionName: 'tool-brush', category: 'Tools', description: 'Brush Tool' },
   { key: 'e', actionName: 'tool-eraser', category: 'Tools', description: 'Eraser Tool' },
   { key: 'g', actionName: 'tool-gradient', category: 'Tools', description: 'Gradient Tool' },
+  { key: 'p', actionName: 'tool-pen', category: 'Tools', description: 'Pen Tool (Vector Bézier Paths)' },
   { key: 't', actionName: 'tool-text', category: 'Tools', description: 'Text Tool' },
   { key: 'u', actionName: 'tool-shape', category: 'Tools', description: 'Shape (Rectangle) Tool' },
   { key: 'h', actionName: 'tool-hand', category: 'Tools', description: 'Hand Tool' },

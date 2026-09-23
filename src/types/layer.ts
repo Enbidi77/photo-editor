@@ -1,4 +1,4 @@
-export type LayerType = 'IMAGE' | 'TEXT' | 'SHAPE' | 'PAINT' | 'ADJUSTMENT' | 'GROUP';
+export type LayerType = 'IMAGE' | 'TEXT' | 'SHAPE' | 'PAINT' | 'ADJUSTMENT' | 'GROUP' | 'PATH';
 
 export type BlendMode =
   | 'normal'
@@ -158,4 +158,20 @@ export interface GroupLayer extends BaseLayer {
   childIds: string[];
 }
 
-export type Layer = ImageLayer | TextLayer | ShapeLayer | PaintLayer | AdjustmentLayer | GroupLayer;
+import type { PathPoint, PointType } from '@/lib/vector/bezier';
+export type { PathPoint, PointType };
+
+export interface PathLayer extends BaseLayer {
+  type: 'PATH';
+  points: PathPoint[];
+  closed: boolean;
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  fillRule?: 'nonzero' | 'evenodd';
+  lineCap?: 'round' | 'butt' | 'square';
+  lineJoin?: 'round' | 'miter' | 'bevel';
+  dash?: number[];
+}
+
+export type Layer = ImageLayer | TextLayer | ShapeLayer | PaintLayer | AdjustmentLayer | GroupLayer | PathLayer;

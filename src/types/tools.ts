@@ -90,6 +90,17 @@ export interface ToolOptions {
     sampleAllLayers: boolean; // sample composite or active layer only
   };
   gradient: GradientToolOptions;
+  pen: PenToolOptions;
+}
+
+export interface PenToolOptions {
+  mode: 'path' | 'shape';
+  stroke: string;
+  strokeWidth: number;
+  fill: string;
+  fillEnabled: boolean;
+  strokeEnabled: boolean;
+  closeOnComplete: boolean;
 }
 
 export const DEFAULT_TOOL_OPTIONS: ToolOptions = {
@@ -142,4 +153,13 @@ export const DEFAULT_TOOL_OPTIONS: ToolOptions = {
     sampleAllLayers: false,
   },
   gradient: DEFAULT_GRADIENT_OPTIONS,
+  pen: {
+    mode: 'path',
+    stroke: '#0078d4',
+    strokeWidth: 2,
+    fill: '#0078d4',
+    fillEnabled: false,
+    strokeEnabled: true,
+    closeOnComplete: false,
+  },
 };

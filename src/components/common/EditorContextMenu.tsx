@@ -44,7 +44,9 @@ import {
   Sparkles,
   Unlink,
   Link as LinkIcon,
+  PenTool,
 } from 'lucide-react';
+import { pathToSelection } from '@/lib/vector/bezier';
 import { useLayerStore } from '@/store/layerStore';
 import { useHistoryStore } from '@/store/historyStore';
 import { useDocumentStore } from '@/store/documentStore';
@@ -74,7 +76,7 @@ import {
 } from '@/editor/commands/MaskCommands';
 import { ImageLoader } from '@/lib/image/imageLoader';
 import { editorTokens } from '@/theme/palette';
-import { Layer, BlendMode, ShapeLayer, PaintLayer, ImageLayer, DEFAULT_ADJUSTMENTS } from '@/types/layer';
+import { Layer, BlendMode, ShapeLayer, PaintLayer, ImageLayer, PathLayer, DEFAULT_ADJUSTMENTS } from '@/types/layer';
 import { nanoid } from 'nanoid';
 import { ContextMenuState } from '@/hooks/useEditorContextMenu';
 
@@ -132,6 +134,8 @@ export function getActionAvailability(
       'reset-zoom',
       'edit-text-properties',
       'edit-shape-properties',
+      'edit-path-properties',
+      'convert-path-to-selection',
     ];
     if (!viewerAllowedActions.includes(action)) {
       return { enabled: false, reason: 'View-only mode: modifications restricted' };
@@ -155,6 +159,7 @@ export function getActionAvailability(
     'delete-mask',
     'replace-image',
     'free-transform',
+    'toggle-path-closed',
   ];
 
   if (layer && layer.locked && lockedRestrictedActions.includes(action)) {
@@ -386,6 +391,39 @@ export const EditorContextMenu: React.FC<EditorContextMenuProps> = ({
   const handleEditShapeProperties = () => {
     handleCloseAll();
     setActivePanel('properties');
+  };
+
+  const handleEditPathProperties = () => {
+    handleCloseAll();
+    setActivePanel('properties');
+    setActiveTool('pen');
+  };
+
+  const handleConvertPathToSelection = () => {
+    handleCloseAll();
+    if (!targetLayer || targetLayer.type !== 'PATH') return;
+    const pathLayer = targetLayer as PathLayer;
+    const selection = pathToSelection(pathLayer.points, pathLayer.closed);
+    if (selection) {
+      useSelectionStore.getState().setSelection(selection);
+      showToast('Selection created from path', 'success');
+    } else {
+      showToast('Path requires at least 2 points for a selection', 'warning');
+    }
+  };
+
+  const handleTogglePathClosed = () => {
+    handleCloseAll();
+    if (!targetLayer || targetLayer.type !== 'PATH') return;
+    const pathLayer = targetLayer as PathLayer;
+    const nextClosed = !pathLayer.closed;
+    const cmd = new UpdateLayerPropertiesCommand(
+      pathLayer.id,
+      { closed: pathLayer.closed },
+      { closed: nextClosed },
+      nextClosed ? 'Close Path' : 'Open Path'
+    );
+    executeCommand(cmd);
   };
 
   const handleReplaceImageClick = () => {
@@ -846,7 +884,7 @@ export const EditorContextMenu: React.FC<EditorContextMenuProps> = ({
           ],
 
           // 6. Type-Aware Actions
-          (targetLayer.type === 'TEXT' || targetLayer.type === 'SHAPE' || targetLayer.type === 'IMAGE') && (
+          (targetLayer.type === 'TEXT' || targetLayer.type === 'SHAPE' || targetLayer.type === 'IMAGE' || targetLayer.type === 'PATH') && (
             <Divider key="div-type" />
           ),
 
@@ -867,6 +905,30 @@ export const EditorContextMenu: React.FC<EditorContextMenuProps> = ({
               <Square size={13} />,
               handleEditShapeProperties
             ),
+
+          targetLayer.type === 'PATH' && [
+            renderItem(
+              'path-make-selection',
+              'convert-path-to-selection',
+              'Make Selection from Path',
+              <SquareDashed size={13} />,
+              handleConvertPathToSelection
+            ),
+            renderItem(
+              'path-toggle-closed',
+              'toggle-path-closed',
+              (targetLayer as PathLayer).closed ? 'Open Path' : 'Close Path',
+              <CircleDot size={13} />,
+              handleTogglePathClosed
+            ),
+            renderItem(
+              'path-props',
+              'edit-path-properties',
+              'Edit Path Properties',
+              <PenTool size={13} />,
+              handleEditPathProperties
+            ),
+          ],
 
           targetLayer.type === 'IMAGE' &&
             renderItem(

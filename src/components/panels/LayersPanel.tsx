@@ -36,6 +36,7 @@ import {
   ChevronUp,
   ChevronDown,
   CircleDot,
+  PenTool,
 } from 'lucide-react';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
@@ -156,6 +157,8 @@ export const LayersPanel: React.FC = () => {
         return <Square size={13} color="#d29922" />;
       case 'PAINT':
         return <Paintbrush size={13} color="#bc8cff" />;
+      case 'PATH':
+        return <PenTool size={13} color="#f0883e" />;
       default:
         return <LayersIcon size={13} />;
     }

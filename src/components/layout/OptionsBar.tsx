@@ -25,7 +25,13 @@ import {
   Columns2,
   Diamond,
   Minus,
+  PenTool,
+  SquareDashed,
+  Square,
 } from 'lucide-react';
+import { useHistoryStore } from '@/store/historyStore';
+import { UpdateLayerPropertiesCommand } from '@/editor/commands/LayerCommands';
+import { PathLayer } from '@/types/layer';
 import Slider from '@mui/material/Slider';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
@@ -44,6 +50,7 @@ export const OptionsBar: React.FC = () => {
   const { activeLayerId, layers, updateLayer, editingMaskLayerId, setEditingMask } = useLayerStore();
   const { document: doc } = useDocumentStore();
   const { zoom, setZoom, resetZoom, fitToViewport, snapEnabled, setSnapEnabled } = useViewStore();
+  const { executeCommand } = useHistoryStore();
 
   const activeLayer = layers.find((l) => l.id === activeLayerId);
 
@@ -935,6 +942,205 @@ export const OptionsBar: React.FC = () => {
             />
             Sample All Layers
           </label>
+        </div>
+      )}
+
+      {/* PEN TOOL OPTIONS */}
+      {activeTool === 'pen' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* Mode Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ color: editorTokens.text.secondary }}>Mode:</span>
+            <Select
+              value={options.pen.mode}
+              onChange={(e) => updateToolOptions('pen', { mode: e.target.value as 'path' | 'shape' })}
+              sx={{ height: 24, fontSize: '0.72rem', minWidth: 76 }}
+            >
+              <MenuItem value="path">Path</MenuItem>
+              <MenuItem value="shape">Shape</MenuItem>
+            </Select>
+          </div>
+
+          <div style={{ width: 1, height: 16, backgroundColor: editorTokens.border.subtle }} />
+
+          {/* Stroke Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', color: editorTokens.text.secondary }}>
+              <input
+                type="checkbox"
+                checked={options.pen.strokeEnabled}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  updateToolOptions('pen', { strokeEnabled: val });
+                  if (activeLayer?.type === 'PATH') {
+                    updateLayer(activeLayer.id, { stroke: val ? options.pen.stroke : 'none' });
+                  }
+                }}
+                style={{ width: 12, height: 12 }}
+              />
+              Stroke:
+            </label>
+            <div
+              style={{
+                width: 18,
+                height: 18,
+                backgroundColor: options.pen.stroke,
+                border: '1px solid #ffffff',
+                borderRadius: 2,
+                cursor: 'pointer',
+              }}
+              title="Stroke Color"
+              onClick={() => {
+                const input = document.createElement('input');
+                input.type = 'color';
+                input.value = options.pen.stroke;
+                input.onchange = (e) => {
+                  const color = (e.target as HTMLInputElement).value;
+                  updateToolOptions('pen', { stroke: color });
+                  if (activeLayer?.type === 'PATH') {
+                    updateLayer(activeLayer.id, { stroke: color });
+                  }
+                };
+                input.click();
+              }}
+            />
+            <input
+              type="number"
+              value={options.pen.strokeWidth}
+              min={1}
+              max={100}
+              onChange={(e) => {
+                const w = Math.max(1, parseInt(e.target.value) || 1);
+                updateToolOptions('pen', { strokeWidth: w });
+                if (activeLayer?.type === 'PATH') {
+                  updateLayer(activeLayer.id, { strokeWidth: w });
+                }
+              }}
+              style={{
+                width: 38,
+                height: 22,
+                backgroundColor: editorTokens.bg.input,
+                border: `1px solid ${editorTokens.border.subtle}`,
+                color: editorTokens.text.primary,
+                fontSize: '0.72rem',
+                padding: '1px 4px',
+                borderRadius: 2,
+              }}
+            />
+            <span style={{ color: editorTokens.text.muted, fontSize: '0.68rem' }}>px</span>
+          </div>
+
+          <div style={{ width: 1, height: 16, backgroundColor: editorTokens.border.subtle }} />
+
+          {/* Fill Controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', color: editorTokens.text.secondary }}>
+              <input
+                type="checkbox"
+                checked={options.pen.fillEnabled}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  updateToolOptions('pen', { fillEnabled: val });
+                  if (activeLayer?.type === 'PATH') {
+                    updateLayer(activeLayer.id, { fill: val ? options.pen.fill : 'none' });
+                  }
+                }}
+                style={{ width: 12, height: 12 }}
+              />
+              Fill:
+            </label>
+            <div
+              style={{
+                width: 18,
+                height: 18,
+                backgroundColor: options.pen.fillEnabled ? options.pen.fill : 'transparent',
+                border: '1px solid #ffffff',
+                borderRadius: 2,
+                cursor: options.pen.fillEnabled ? 'pointer' : 'default',
+                opacity: options.pen.fillEnabled ? 1 : 0.4,
+              }}
+              title="Fill Color"
+              onClick={() => {
+                if (!options.pen.fillEnabled) return;
+                const input = document.createElement('input');
+                input.type = 'color';
+                input.value = options.pen.fill;
+                input.onchange = (e) => {
+                  const color = (e.target as HTMLInputElement).value;
+                  updateToolOptions('pen', { fill: color });
+                  if (activeLayer?.type === 'PATH') {
+                    updateLayer(activeLayer.id, { fill: color });
+                  }
+                };
+                input.click();
+              }}
+            />
+          </div>
+
+          <div style={{ width: 1, height: 16, backgroundColor: editorTokens.border.subtle }} />
+
+          {/* Make Selection button */}
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('pen-make-selection'));
+            }}
+            startIcon={<SquareDashed size={12} />}
+            sx={{ height: 22, fontSize: '0.68rem', padding: '1px 6px' }}
+          >
+            Make Selection
+          </Button>
+
+          {/* If active layer is PATH: path actions */}
+          {activeLayer?.type === 'PATH' && (() => {
+            const pathLayer = activeLayer as PathLayer;
+            return (
+              <>
+                <div style={{ width: 1, height: 16, backgroundColor: editorTokens.border.subtle }} />
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => {
+                    const nextClosed = !pathLayer.closed;
+                    const cmd = new UpdateLayerPropertiesCommand(
+                      pathLayer.id,
+                      { closed: pathLayer.closed },
+                      { closed: nextClosed },
+                      nextClosed ? 'Close Path' : 'Open Path'
+                    );
+                    executeCommand(cmd);
+                  }}
+                  sx={{ height: 22, fontSize: '0.68rem', padding: '1px 6px' }}
+                >
+                  {pathLayer.closed ? 'Open Path' : 'Close Path'}
+                </Button>
+
+                <Button
+                  size="small"
+                  variant="text"
+                  onClick={() => window.dispatchEvent(new CustomEvent('pen-convert-point', { detail: { type: 'corner' } }))}
+                  startIcon={<Square size={11} />}
+                  sx={{ height: 22, fontSize: '0.68rem', padding: '1px 4px' }}
+                >
+                  To Corner
+                </Button>
+                <Button
+                  size="small"
+                  variant="text"
+                  onClick={() => window.dispatchEvent(new CustomEvent('pen-convert-point', { detail: { type: 'smooth' } }))}
+                  startIcon={<CircleDot size={11} />}
+                  sx={{ height: 22, fontSize: '0.68rem', padding: '1px 4px' }}
+                >
+                  To Smooth
+                </Button>
+
+                <span style={{ color: editorTokens.text.muted, fontSize: '0.68rem' }}>
+                  ({pathLayer.points.length} pts)
+                </span>
+              </>
+            );
+          })()}
         </div>
       )}
 

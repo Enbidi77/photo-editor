@@ -302,6 +302,9 @@ export const EditorShell: React.FC = () => {
           case 'g':
             setActiveTool('gradient');
             break;
+          case 'p':
+            setActiveTool('pen');
+            break;
           case 't':
             setActiveTool('text');
             break;

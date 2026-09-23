@@ -20,7 +20,17 @@ import {
   ShapeLayer,
   PaintLayer,
   PaintPath,
+  PathLayer,
+  PathPoint,
 } from '@/types/layer';
+import {
+  pathPointsToSvg,
+  pathToSelection,
+  convertPointType,
+  updateHandle,
+  hitTestAnchor,
+  hitTestHandle,
+} from '@/lib/vector/bezier';
 import { AddLayerCommand, TransformLayerCommand, UpdateLayerPropertiesCommand } from '../commands/LayerCommands';
 import { nanoid } from 'nanoid';
 import { useEditorContextMenu } from '@/hooks/useEditorContextMenu';
@@ -93,6 +103,16 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
   const gradientStartCircleRef = useRef<Konva.Circle | null>(null);
   const gradientEndCircleRef = useRef<Konva.Circle | null>(null);
 
+  // Pen tool refs
+  const inProgressPointsRef = useRef<PathPoint[]>([]);
+  const isDraggingPenHandleRef = useRef(false);
+  const selectedAnchorIndexRef = useRef<number | null>(null);
+  const dragTargetRef = useRef<{ type: 'anchor' | 'handleIn' | 'handleOut'; index: number } | null>(null);
+  const dragStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const pointsSnapshotRef = useRef<PathPoint[] | null>(null);
+  const hoverCloseRef = useRef(false);
+  const penOverlayGroupRef = useRef<Konva.Group | null>(null);
+
   // Initialize Konva Stage
   useEffect(() => {
     if (!containerRef.current || !doc) return;
@@ -105,6 +125,10 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
 
     const mainLayer = new Konva.Layer();
     stage.add(mainLayer);
+
+    const penOverlayGroup = new Konva.Group({ listening: false });
+    mainLayer.add(penOverlayGroup);
+    penOverlayGroupRef.current = penOverlayGroup;
 
     const transformer = new Konva.Transformer({
       anchorSize: 8,
@@ -164,6 +188,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
       stageRef.current = null;
       mainLayerRef.current = null;
       transformerRef.current = null;
+      penOverlayGroupRef.current = null;
     };
   }, [doc?.id]); // Recreate only if document ID changes
 
@@ -177,6 +202,188 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
     }
   }, [doc?.width, doc?.height]);
 
+  const renderPenOverlay = useCallback(() => {
+    const overlay = penOverlayGroupRef.current;
+    const mainLayer = mainLayerRef.current;
+    if (!overlay || !mainLayer) return;
+
+    overlay.destroyChildren();
+
+    if (activeTool !== 'pen') {
+      mainLayer.batchDraw();
+      return;
+    }
+
+    const inProgress = inProgressPointsRef.current;
+    const activeLayer = layers.find((l) => l.id === activeLayerId);
+
+    // Case 1: In-progress path
+    if (inProgress.length > 0) {
+      if (inProgress.length >= 2) {
+        const svgPath = pathPointsToSvg(inProgress, false);
+        const curveNode = new Konva.Path({
+          data: svgPath,
+          stroke: '#0078d4',
+          strokeWidth: 2,
+          dash: [4, 4],
+          listening: false,
+        });
+        overlay.add(curveNode);
+      }
+
+      inProgress.forEach((p, idx) => {
+        const isStart = idx === 0;
+        if (isStart && hoverCloseRef.current) {
+          const halo = new Konva.Circle({
+            x: p.x,
+            y: p.y,
+            radius: 10,
+            stroke: '#2ea043',
+            strokeWidth: 2,
+            fill: 'rgba(46, 160, 67, 0.25)',
+            listening: false,
+          });
+          overlay.add(halo);
+        }
+
+        const isCurrent = idx === inProgress.length - 1;
+        const rect = new Konva.Rect({
+          x: p.x - 4,
+          y: p.y - 4,
+          width: 8,
+          height: 8,
+          fill: isCurrent ? '#0078d4' : '#ffffff',
+          stroke: '#0078d4',
+          strokeWidth: 1.5,
+          listening: false,
+        });
+        overlay.add(rect);
+
+        // Render handles of the currently dragged point
+        if (isCurrent && (p.handleIn || p.handleOut)) {
+          if (p.handleOut) {
+            const line = new Konva.Line({
+              points: [p.x, p.y, p.handleOut.x, p.handleOut.y],
+              stroke: '#0078d4',
+              strokeWidth: 1,
+              listening: false,
+            });
+            const handleDot = new Konva.Circle({
+              x: p.handleOut.x,
+              y: p.handleOut.y,
+              radius: 4,
+              fill: '#0078d4',
+              stroke: '#ffffff',
+              strokeWidth: 1.5,
+              listening: false,
+            });
+            overlay.add(line);
+            overlay.add(handleDot);
+          }
+          if (p.handleIn) {
+            const line = new Konva.Line({
+              points: [p.x, p.y, p.handleIn.x, p.handleIn.y],
+              stroke: '#0078d4',
+              strokeWidth: 1,
+              listening: false,
+            });
+            const handleDot = new Konva.Circle({
+              x: p.handleIn.x,
+              y: p.handleIn.y,
+              radius: 4,
+              fill: '#0078d4',
+              stroke: '#ffffff',
+              strokeWidth: 1.5,
+              listening: false,
+            });
+            overlay.add(line);
+            overlay.add(handleDot);
+          }
+        }
+      });
+
+      overlay.moveToTop();
+      mainLayer.batchDraw();
+      return;
+    }
+
+    // Case 2: Editing active PathLayer
+    if (activeLayer && activeLayer.type === 'PATH') {
+      const pathLayer = activeLayer as PathLayer;
+      const offX = pathLayer.x;
+      const offY = pathLayer.y;
+
+      pathLayer.points.forEach((p, idx) => {
+        const isSelected = selectedAnchorIndexRef.current === idx;
+        const ax = p.x + offX;
+        const ay = p.y + offY;
+
+        const anchorRect = new Konva.Rect({
+          x: ax - 4,
+          y: ay - 4,
+          width: 8,
+          height: 8,
+          fill: isSelected ? '#0078d4' : '#ffffff',
+          stroke: isSelected ? '#ffffff' : '#0078d4',
+          strokeWidth: 1.5,
+          listening: false,
+        });
+        overlay.add(anchorRect);
+
+        if (isSelected) {
+          if (p.handleOut) {
+            const hx = p.handleOut.x + offX;
+            const hy = p.handleOut.y + offY;
+            const line = new Konva.Line({
+              points: [ax, ay, hx, hy],
+              stroke: '#0078d4',
+              strokeWidth: 1,
+              dash: [2, 2],
+              listening: false,
+            });
+            const dot = new Konva.Circle({
+              x: hx,
+              y: hy,
+              radius: 4,
+              fill: '#0078d4',
+              stroke: '#ffffff',
+              strokeWidth: 1.5,
+              listening: false,
+            });
+            overlay.add(line);
+            overlay.add(dot);
+          }
+
+          if (p.handleIn) {
+            const hx = p.handleIn.x + offX;
+            const hy = p.handleIn.y + offY;
+            const line = new Konva.Line({
+              points: [ax, ay, hx, hy],
+              stroke: '#0078d4',
+              strokeWidth: 1,
+              dash: [2, 2],
+              listening: false,
+            });
+            const dot = new Konva.Circle({
+              x: hx,
+              y: hy,
+              radius: 4,
+              fill: '#0078d4',
+              stroke: '#ffffff',
+              strokeWidth: 1.5,
+              listening: false,
+            });
+            overlay.add(line);
+            overlay.add(dot);
+          }
+        }
+      });
+    }
+
+    overlay.moveToTop();
+    mainLayer.batchDraw();
+  }, [activeTool, layers, activeLayerId]);
+
   // Synchronize Konva Nodes with Zustand Layers
   useEffect(() => {
     const stage = stageRef.current;
@@ -184,9 +391,10 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
     const transformer = transformerRef.current;
     if (!stage || !mainLayer || !transformer || !doc) return;
 
-    // Remove old layer nodes (except transformer and preview nodes)
+    // Remove old layer nodes (except transformer, preview nodes, and pen overlay)
+    const penOverlay = penOverlayGroupRef.current;
     const children = mainLayer.getChildren((node) => {
-      return node !== transformer && node !== previewShapeNodeRef.current;
+      return node !== transformer && node !== previewShapeNodeRef.current && node !== penOverlay;
     });
     children.forEach((child) => child.destroy());
 
@@ -453,6 +661,31 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
         });
 
         node = group;
+      } else if (layer.type === 'PATH') {
+        const pathLayer = layer as PathLayer;
+        const svgPath = pathPointsToSvg(pathLayer.points, pathLayer.closed);
+        const hasFill = pathLayer.fill && pathLayer.fill !== 'none';
+        const hasStroke = pathLayer.stroke && pathLayer.stroke !== 'none';
+
+        node = new Konva.Path({
+          id: layer.id,
+          name: layer.name,
+          data: svgPath,
+          x: layer.x,
+          y: layer.y,
+          fill: hasFill ? pathLayer.fill : undefined,
+          stroke: hasStroke ? pathLayer.stroke : undefined,
+          strokeWidth: hasStroke ? (pathLayer.strokeWidth ?? 2) : 0,
+          lineCap: (pathLayer.lineCap as any) || 'round',
+          lineJoin: (pathLayer.lineJoin as any) || 'round',
+          dash: pathLayer.dash,
+          rotation: layer.rotation,
+          opacity: layer.opacity,
+          visible: layer.visible,
+          draggable: activeTool === 'move' && !layer.locked,
+          listening: layer.visible,
+          globalCompositeOperation: layer.blendMode === 'normal' ? 'source-over' : (layer.blendMode as any),
+        });
       }
 
       if (node) {
@@ -645,8 +878,159 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
       transformer.nodes([]);
     }
 
+    penOverlayGroupRef.current?.moveToTop();
+    renderPenOverlay();
+
     mainLayer.batchDraw();
-  }, [layers, activeLayerId, activeTool, doc]);
+  }, [layers, activeLayerId, activeTool, doc, renderPenOverlay]);
+
+  const finalizePath = useCallback(
+    (closed = false) => {
+      const pts = inProgressPointsRef.current;
+      if (!pts || pts.length < 2) {
+        inProgressPointsRef.current = [];
+        renderPenOverlay();
+        return;
+      }
+
+      const penOpts = options.pen;
+      const newPathLayer: PathLayer = {
+        id: nanoid(),
+        type: 'PATH',
+        name: `Path ${layers.length + 1}`,
+        visible: true,
+        locked: false,
+        opacity: 1,
+        blendMode: 'normal',
+        x: 0,
+        y: 0,
+        width: doc?.width || 800,
+        height: doc?.height || 600,
+        rotation: 0,
+        zIndex: layers.length,
+        parentId: null,
+        points: [...pts],
+        closed,
+        stroke: penOpts.strokeEnabled ? penOpts.stroke : 'none',
+        strokeWidth: penOpts.strokeWidth,
+        fill: penOpts.fillEnabled ? penOpts.fill : 'none',
+        lineCap: 'round',
+        lineJoin: 'round',
+      };
+
+      const cmd = new AddLayerCommand(newPathLayer, 0);
+      executeCommand(cmd);
+      selectLayer(newPathLayer.id);
+
+      inProgressPointsRef.current = [];
+      selectedAnchorIndexRef.current = null;
+      hoverCloseRef.current = false;
+      renderPenOverlay();
+    },
+    [doc, options.pen, layers.length, executeCommand, selectLayer, renderPenOverlay]
+  );
+
+  // Tool change cleanup or auto-commit
+  useEffect(() => {
+    if (activeTool !== 'pen') {
+      if (inProgressPointsRef.current.length >= 2) {
+        finalizePath(false);
+      } else {
+        inProgressPointsRef.current = [];
+        selectedAnchorIndexRef.current = null;
+      }
+    }
+    renderPenOverlay();
+  }, [activeTool, finalizePath, renderPenOverlay]);
+
+  // Window event listeners for pen actions (custom events & shortcuts)
+  useEffect(() => {
+    const handleMakeSelection = () => {
+      if (inProgressPointsRef.current.length >= 2) {
+        const sel = pathToSelection(inProgressPointsRef.current, true);
+        if (sel) {
+          setSelection(sel);
+        }
+        inProgressPointsRef.current = [];
+        renderPenOverlay();
+      } else {
+        const activeLayer = layers.find((l) => l.id === activeLayerId);
+        if (activeLayer?.type === 'PATH') {
+          const pathLayer = activeLayer as PathLayer;
+          const sel = pathToSelection(pathLayer.points, pathLayer.closed);
+          if (sel) {
+            setSelection(sel);
+          }
+        }
+      }
+    };
+
+    const handleConvertPoint = (e: Event) => {
+      const customEvent = e as CustomEvent<{ type: 'corner' | 'smooth' }>;
+      const activeLayer = layers.find((l) => l.id === activeLayerId);
+      if (!activeLayer || activeLayer.type !== 'PATH') return;
+      const pathLayer = activeLayer as PathLayer;
+      const selIdx = selectedAnchorIndexRef.current;
+      if (selIdx === null || selIdx < 0 || selIdx >= pathLayer.points.length) return;
+
+      const pt = pathLayer.points[selIdx];
+      const prevPt = selIdx > 0 ? pathLayer.points[selIdx - 1] : undefined;
+      const nextPt = selIdx < pathLayer.points.length - 1 ? pathLayer.points[selIdx + 1] : undefined;
+      const updated = convertPointType(pt, customEvent.detail.type, prevPt, nextPt);
+      const nextPoints = [...pathLayer.points];
+      nextPoints[selIdx] = updated;
+
+      const cmd = new UpdateLayerPropertiesCommand(
+        pathLayer.id,
+        { points: pathLayer.points },
+        { points: nextPoints },
+        `Convert Point to ${customEvent.detail.type}`
+      );
+      executeCommand(cmd);
+      renderPenOverlay();
+    };
+
+    const handlePenKeyDown = (e: KeyboardEvent) => {
+      if (activeTool !== 'pen') return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (e.key === 'Enter' || e.key === 'Escape') {
+        if (inProgressPointsRef.current.length >= 2) {
+          e.preventDefault();
+          finalizePath(false);
+        }
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        const activeLayer = layers.find((l) => l.id === activeLayerId);
+        if (activeLayer?.type === 'PATH' && selectedAnchorIndexRef.current !== null) {
+          const pathLayer = activeLayer as PathLayer;
+          const selIdx = selectedAnchorIndexRef.current;
+          if (selIdx >= 0 && selIdx < pathLayer.points.length && pathLayer.points.length > 2) {
+            e.preventDefault();
+            const nextPoints = pathLayer.points.filter((_, idx) => idx !== selIdx);
+            selectedAnchorIndexRef.current = null;
+            const cmd = new UpdateLayerPropertiesCommand(
+              pathLayer.id,
+              { points: pathLayer.points },
+              { points: nextPoints },
+              'Delete Anchor Point'
+            );
+            executeCommand(cmd);
+            renderPenOverlay();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('pen-make-selection', handleMakeSelection);
+    window.addEventListener('pen-convert-point', handleConvertPoint);
+    window.addEventListener('keydown', handlePenKeyDown);
+
+    return () => {
+      window.removeEventListener('pen-make-selection', handleMakeSelection);
+      window.removeEventListener('pen-convert-point', handleConvertPoint);
+      window.removeEventListener('keydown', handlePenKeyDown);
+    };
+  }, [activeTool, layers, activeLayerId, setSelection, executeCommand, finalizePath, renderPenOverlay]);
 
   // Stage Pointer Event Handlers (Drawing, Shapes, Eyedropper, Marquee)
   const handleStagePointerDown = useCallback(
@@ -666,6 +1050,114 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
         const pixel = ctx.getImageData(Math.round(x), Math.round(y), 1, 1).data;
         const hex = `#${((1 << 24) + (pixel[0] << 16) + (pixel[1] << 8) + pixel[2]).toString(16).slice(1)}`;
         setForegroundColor(hex);
+        return;
+      }
+
+      // Pen tool: create paths or edit existing path
+      if (activeTool === 'pen') {
+        const activeLayer = layers.find((l) => l.id === activeLayerId);
+
+        // 1. If an existing PathLayer is active and not currently drawing new path, test anchor & handle hits
+        if (activeLayer && activeLayer.type === 'PATH' && inProgressPointsRef.current.length === 0) {
+          const pathLayer = activeLayer as PathLayer;
+          const localX = x - pathLayer.x;
+          const localY = y - pathLayer.y;
+
+          // Check if clicked on a handle of the currently selected anchor
+          if (selectedAnchorIndexRef.current !== null) {
+            const selIdx = selectedAnchorIndexRef.current;
+            const selPt = pathLayer.points[selIdx];
+            if (selPt) {
+              const hitH = hitTestHandle(selPt, localX, localY, 8);
+              if (hitH) {
+                dragTargetRef.current = {
+                  type: hitH === 'out' ? 'handleOut' : 'handleIn',
+                  index: selIdx,
+                };
+                dragStartPosRef.current = { x: localX, y: localY };
+                pointsSnapshotRef.current = JSON.parse(JSON.stringify(pathLayer.points));
+                return;
+              }
+            }
+          }
+
+          // Check if clicked on any anchor point
+          const hitAnchorIdx = hitTestAnchor(pathLayer.points, localX, localY, 8);
+          if (hitAnchorIdx !== -1) {
+            const pt = pathLayer.points[hitAnchorIdx];
+
+            // Alt-click or Option-click converts between smooth and corner
+            if (e.evt && (e.evt as MouseEvent).altKey) {
+              const targetType = pt.pointType === 'smooth' || pt.handleIn || pt.handleOut ? 'corner' : 'smooth';
+              const prevPt = hitAnchorIdx > 0 ? pathLayer.points[hitAnchorIdx - 1] : undefined;
+              const nextPt = hitAnchorIdx < pathLayer.points.length - 1 ? pathLayer.points[hitAnchorIdx + 1] : undefined;
+              const newPt = convertPointType(pt, targetType, prevPt, nextPt);
+              const nextPoints = [...pathLayer.points];
+              nextPoints[hitAnchorIdx] = newPt;
+
+              const cmd = new UpdateLayerPropertiesCommand(
+                pathLayer.id,
+                { points: pathLayer.points },
+                { points: nextPoints },
+                `Convert to ${targetType}`
+              );
+              executeCommand(cmd);
+              selectedAnchorIndexRef.current = hitAnchorIdx;
+              renderPenOverlay();
+              return;
+            }
+
+            // Normal click on anchor point: select it and prepare to drag
+            selectedAnchorIndexRef.current = hitAnchorIdx;
+            dragTargetRef.current = { type: 'anchor', index: hitAnchorIdx };
+            dragStartPosRef.current = { x: localX, y: localY };
+            pointsSnapshotRef.current = JSON.parse(JSON.stringify(pathLayer.points));
+            renderPenOverlay();
+            return;
+          }
+        }
+
+        // 2. In-progress path creation
+        if (inProgressPointsRef.current.length > 0) {
+          const p0 = inProgressPointsRef.current[0];
+          const distToStart = Math.hypot(p0.x - x, p0.y - y);
+
+          // Click near start point closes path!
+          if (distToStart <= 10 && inProgressPointsRef.current.length >= 2) {
+            finalizePath(true);
+            return;
+          }
+
+          // Add next anchor point
+          const newPt: PathPoint = {
+            id: nanoid(),
+            x,
+            y,
+            handleIn: null,
+            handleOut: null,
+            pointType: 'corner',
+          };
+          inProgressPointsRef.current.push(newPt);
+          selectedAnchorIndexRef.current = inProgressPointsRef.current.length - 1;
+          isDraggingPenHandleRef.current = true;
+          renderPenOverlay();
+          return;
+        }
+
+        // 3. Start a brand new path
+        selectedAnchorIndexRef.current = 0;
+        inProgressPointsRef.current = [
+          {
+            id: nanoid(),
+            x,
+            y,
+            handleIn: null,
+            handleOut: null,
+            pointType: 'corner',
+          },
+        ];
+        isDraggingPenHandleRef.current = true;
+        renderPenOverlay();
         return;
       }
 
@@ -961,6 +1453,9 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
       setSelection,
       editingMaskLayerId,
       doc,
+      activeLayerId,
+      finalizePath,
+      renderPenOverlay,
     ]
   );
 
@@ -976,6 +1471,83 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
       const { x, y } = pointerPos;
       if (onPointerMove) {
         onPointerMove(Math.round(x), Math.round(y));
+      }
+
+      // Active Pen Tool interaction
+      if (activeTool === 'pen') {
+        if (isDraggingPenHandleRef.current && inProgressPointsRef.current.length > 0) {
+          const currPt = inProgressPointsRef.current[inProgressPointsRef.current.length - 1];
+          const dx = x - currPt.x;
+          const dy = y - currPt.y;
+
+          if (Math.hypot(dx, dy) > 2) {
+            currPt.pointType = 'smooth';
+            currPt.handleOut = { x, y };
+            currPt.handleIn = { x: currPt.x - dx, y: currPt.y - dy };
+            renderPenOverlay();
+          }
+          return;
+        }
+
+        if (dragTargetRef.current && activeLayerId) {
+          const activeLayer = layers.find((l) => l.id === activeLayerId);
+          if (activeLayer && activeLayer.type === 'PATH') {
+            const pathLayer = activeLayer as PathLayer;
+            const localX = x - pathLayer.x;
+            const localY = y - pathLayer.y;
+            const target = dragTargetRef.current;
+            const pt = pathLayer.points[target.index];
+
+            if (pt) {
+              if (target.type === 'anchor') {
+                const prevPos = dragStartPosRef.current || { x: localX, y: localY };
+                const dx = localX - prevPos.x;
+                const dy = localY - prevPos.y;
+                dragStartPosRef.current = { x: localX, y: localY };
+
+                const nextPt: PathPoint = {
+                  ...pt,
+                  x: pt.x + dx,
+                  y: pt.y + dy,
+                  handleIn: pt.handleIn ? { x: pt.handleIn.x + dx, y: pt.handleIn.y + dy } : null,
+                  handleOut: pt.handleOut ? { x: pt.handleOut.x + dx, y: pt.handleOut.y + dy } : null,
+                };
+
+                const nextPoints = [...pathLayer.points];
+                nextPoints[target.index] = nextPt;
+                updateLayer(pathLayer.id, { points: nextPoints });
+                renderPenOverlay();
+                return;
+              }
+
+              if (target.type === 'handleIn' || target.type === 'handleOut') {
+                const nextPt = updateHandle(
+                  pt,
+                  target.type === 'handleIn' ? 'in' : 'out',
+                  { x: localX, y: localY },
+                  true
+                );
+                const nextPoints = [...pathLayer.points];
+                nextPoints[target.index] = nextPt;
+                updateLayer(pathLayer.id, { points: nextPoints });
+                renderPenOverlay();
+                return;
+              }
+            }
+          }
+        }
+
+        // Hover test on start point for closing ring
+        if (inProgressPointsRef.current.length >= 2) {
+          const p0 = inProgressPointsRef.current[0];
+          const distToStart = Math.hypot(p0.x - x, p0.y - y);
+          const isNear = distToStart <= 10;
+          if (isNear !== hoverCloseRef.current) {
+            hoverCloseRef.current = isNear;
+            renderPenOverlay();
+          }
+        }
+        return;
       }
 
       // Active Brush / Eraser drawing
@@ -1055,11 +1627,48 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
         return;
       }
     },
-    [activeTool, onPointerMove, options.marquee.shape, setSelection]
+    [activeTool, onPointerMove, options.marquee.shape, setSelection, layers, activeLayerId, updateLayer, renderPenOverlay]
   );
 
   const handleStagePointerUp = useCallback(() => {
     const mainLayer = mainLayerRef.current;
+
+    // Finish Pen Tool interaction
+    if (activeTool === 'pen') {
+      if (isDraggingPenHandleRef.current) {
+        isDraggingPenHandleRef.current = false;
+        renderPenOverlay();
+        return;
+      }
+
+      if (dragTargetRef.current && activeLayerId) {
+        const activeLayer = layers.find((l) => l.id === activeLayerId);
+        if (activeLayer && activeLayer.type === 'PATH' && pointsSnapshotRef.current) {
+          const pathLayer = activeLayer as PathLayer;
+          const prevPoints = pointsSnapshotRef.current;
+          const currentPoints = pathLayer.points;
+          pointsSnapshotRef.current = null;
+          dragTargetRef.current = null;
+          dragStartPosRef.current = null;
+
+          const cmd = new UpdateLayerPropertiesCommand(
+            pathLayer.id,
+            { points: prevPoints },
+            { points: currentPoints },
+            'Edit Path'
+          );
+          executeCommand(cmd);
+          renderPenOverlay();
+          return;
+        }
+
+        dragTargetRef.current = null;
+        dragStartPosRef.current = null;
+        pointsSnapshotRef.current = null;
+        renderPenOverlay();
+        return;
+      }
+    }
 
     // Finish Mask painting stroke
     if (isMaskPaintingRef.current && maskCanvasRef.current && editingMaskLayerId) {
@@ -1447,6 +2056,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
     executeCommand,
     selectLayer,
     editingMaskLayerId,
+    renderPenOverlay,
   ]);
 
   return (
@@ -1477,7 +2087,40 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
         const stage = stageRef.current;
         if (stage) {
           stage.setPointersPositions(e.nativeEvent);
-          handleStagePointerDown({} as any);
+          handleStagePointerDown({ evt: e.nativeEvent } as any);
+        }
+      }}
+      onDoubleClick={(e) => {
+        if (activeTool !== 'pen') return;
+        const stage = stageRef.current;
+        if (!stage) return;
+        const pos = stage.getPointerPosition();
+        if (!pos) return;
+        const activeLayer = layers.find((l) => l.id === activeLayerId);
+        if (activeLayer && activeLayer.type === 'PATH') {
+          const pathLayer = activeLayer as PathLayer;
+          const localX = pos.x - pathLayer.x;
+          const localY = pos.y - pathLayer.y;
+          const hitIdx = hitTestAnchor(pathLayer.points, localX, localY, 8);
+          if (hitIdx !== -1) {
+            const pt = pathLayer.points[hitIdx];
+            const targetType = pt.pointType === 'smooth' || pt.handleIn || pt.handleOut ? 'corner' : 'smooth';
+            const prevPt = hitIdx > 0 ? pathLayer.points[hitIdx - 1] : undefined;
+            const nextPt = hitIdx < pathLayer.points.length - 1 ? pathLayer.points[hitIdx + 1] : undefined;
+            const newPt = convertPointType(pt, targetType, prevPt, nextPt);
+            const nextPoints = [...pathLayer.points];
+            nextPoints[hitIdx] = newPt;
+
+            const cmd = new UpdateLayerPropertiesCommand(
+              pathLayer.id,
+              { points: pathLayer.points },
+              { points: nextPoints },
+              `Convert Point to ${targetType}`
+            );
+            executeCommand(cmd);
+            selectedAnchorIndexRef.current = hitIdx;
+            renderPenOverlay();
+          }
         }
       }}
       onMouseMove={(e) => {
@@ -1492,7 +2135,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
         const stage = stageRef.current;
         if (stage) {
           stage.setPointersPositions(e.nativeEvent);
-          handleStagePointerDown({} as any);
+          handleStagePointerDown({ evt: e.nativeEvent } as any);
         }
       }}
       onTouchMove={(e) => {
