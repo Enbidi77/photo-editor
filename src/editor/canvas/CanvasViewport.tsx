@@ -10,6 +10,7 @@ import { useHistoryStore } from '@/store/historyStore';
 import { useUIStore } from '@/store/uiStore';
 import { Rulers } from './Rulers';
 import { GuidesOverlay } from './GuidesOverlay';
+import { SmartGuidesOverlay } from './SmartGuidesOverlay';
 import { CropOverlay } from './CropOverlay';
 import { MarqueeOverlay } from './MarqueeOverlay';
 import { CanvasStage } from './CanvasStage';
@@ -312,6 +313,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
       {/* Guides Overlay */}
       <GuidesOverlay docX={centerDocX} docY={centerDocY} />
+
+      {/* Smart Guides Overlay */}
+      <SmartGuidesOverlay docX={centerDocX} docY={centerDocY} />
 
       {/* Selection Marquee Overlay */}
       <MarqueeOverlay docX={centerDocX} docY={centerDocY} zoom={zoom} />

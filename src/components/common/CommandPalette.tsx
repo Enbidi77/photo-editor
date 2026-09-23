@@ -54,6 +54,8 @@ export const CommandPalette: React.FC = () => {
     { id: 'filter-noise', label: 'Filter: Add Noise...', category: 'Filter', perform: () => openDialog('filters', 'noise') },
     { id: 'filter-sharpen', label: 'Filter: Sharpen...', category: 'Filter', perform: () => openDialog('filters', 'sharpen') },
     { id: 'filter-bw', label: 'Filter: Convert to Black & White', category: 'Filter', perform: () => openDialog('filters', 'grayscale') },
+    { id: 'filter-vignette', label: 'Filter: Vignette...', category: 'Filter', perform: () => openDialog('filters', 'vignette') },
+    { id: 'filter-chromatic', label: 'Filter: Chromatic Aberration...', category: 'Filter', perform: () => openDialog('filters', 'chromatic-aberration') },
     { id: 'adj-dialog', label: 'Image Adjustments...', category: 'Image', perform: () => openDialog('adjustments') },
     { id: 'shortcuts-cheat', label: 'Keyboard Shortcuts Cheat Sheet', category: 'Help', shortcut: '?', perform: () => openDialog('shortcuts') },
   ];

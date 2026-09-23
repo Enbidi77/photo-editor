@@ -1,3 +1,5 @@
+import { GradientToolOptions, DEFAULT_GRADIENT_OPTIONS } from '@/lib/image/gradient';
+
 export type ToolType =
   | 'move'
   | 'marquee'
@@ -81,6 +83,13 @@ export interface ToolOptions {
   zoom: {
     mode: 'in' | 'out';
   };
+  lasso: Record<string, never>; // freehand selection, no special options
+  magicWand: {
+    tolerance: number;        // 0–255, color distance threshold
+    contiguous: boolean;      // only select connected pixels
+    sampleAllLayers: boolean; // sample composite or active layer only
+  };
+  gradient: GradientToolOptions;
 }
 
 export const DEFAULT_TOOL_OPTIONS: ToolOptions = {
@@ -126,4 +135,11 @@ export const DEFAULT_TOOL_OPTIONS: ToolOptions = {
   zoom: {
     mode: 'in',
   },
+  lasso: {},
+  magicWand: {
+    tolerance: 32,
+    contiguous: true,
+    sampleAllLayers: false,
+  },
+  gradient: DEFAULT_GRADIENT_OPTIONS,
 };

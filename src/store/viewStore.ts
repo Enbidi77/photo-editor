@@ -6,6 +6,12 @@ export interface Guide {
   position: number;
 }
 
+export interface SmartGuide {
+  orientation: 'horizontal' | 'vertical';
+  position: number;  // in document coordinates
+  type: 'edge' | 'center'; // edge alignment vs center alignment
+}
+
 interface ViewState {
   zoom: number; // 1 = 100%
   panX: number;
@@ -18,6 +24,12 @@ interface ViewState {
   snapToGrid: boolean;
   snapToGuides: boolean;
   snapToLayers: boolean;
+
+  // Smart guides & snapping
+  snapEnabled: boolean;          // master toggle
+  snapThreshold: number;         // pixel threshold for snapping
+  snapToDocumentBounds: boolean; // snap to document edges/center
+  activeSmartGuides: SmartGuide[]; // transient alignment lines during drag
 
   guides: Guide[];
   cursorPos: { x: number; y: number };
@@ -36,6 +48,14 @@ interface ViewState {
   toggleRulers: () => void;
   toggleGuides: () => void;
   toggleSnapToGrid: () => void;
+  setSnapEnabled: (enabled: boolean) => void;
+  toggleSnapEnabled: () => void;
+  setSnapThreshold: (px: number) => void;
+  setSnapToDocumentBounds: (enabled: boolean) => void;
+  setSnapToLayers: (enabled: boolean) => void;
+  setSnapToGuides: (enabled: boolean) => void;
+  setActiveSmartGuides: (guides: SmartGuide[]) => void;
+  clearSmartGuides: () => void;
 
   addGuide: (orientation: 'horizontal' | 'vertical', position: number) => void;
   removeGuide: (id: string) => void;
@@ -57,6 +77,11 @@ export const useViewStore = create<ViewState>((set, get) => ({
   snapToGrid: false,
   snapToGuides: true,
   snapToLayers: true,
+
+  snapEnabled: true,
+  snapThreshold: 5,
+  snapToDocumentBounds: true,
+  activeSmartGuides: [],
 
   guides: [],
   cursorPos: { x: 0, y: 0 },
@@ -106,6 +131,14 @@ export const useViewStore = create<ViewState>((set, get) => ({
   toggleRulers: () => set((s) => ({ showRulers: !s.showRulers })),
   toggleGuides: () => set((s) => ({ showGuides: !s.showGuides })),
   toggleSnapToGrid: () => set((s) => ({ snapToGrid: !s.snapToGrid })),
+  setSnapEnabled: (enabled) => set({ snapEnabled: enabled }),
+  toggleSnapEnabled: () => set((s) => ({ snapEnabled: !s.snapEnabled })),
+  setSnapThreshold: (px) => set({ snapThreshold: Math.max(1, Math.min(20, px)) }),
+  setSnapToDocumentBounds: (enabled) => set({ snapToDocumentBounds: enabled }),
+  setSnapToLayers: (enabled) => set({ snapToLayers: enabled }),
+  setSnapToGuides: (enabled) => set({ snapToGuides: enabled }),
+  setActiveSmartGuides: (guides) => set({ activeSmartGuides: guides }),
+  clearSmartGuides: () => set({ activeSmartGuides: [] }),
 
   addGuide: (orientation, position) => {
     set((s) => ({

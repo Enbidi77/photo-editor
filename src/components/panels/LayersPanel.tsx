@@ -6,6 +6,12 @@ import { useHistoryStore } from '@/store/historyStore';
 import { useDocumentStore } from '@/store/documentStore';
 import { Layer, BlendMode, ImageLayer, TextLayer, ShapeLayer } from '@/types/layer';
 import {
+  AddMaskCommand,
+  RemoveMaskCommand,
+  ToggleMaskEnabledCommand,
+  ApplyMaskCommand,
+} from '@/editor/commands/MaskCommands';
+import {
   AddLayerCommand,
   DeleteLayerCommand,
   ChangeOpacityCommand,
@@ -27,8 +33,10 @@ import {
   Plus,
   ChevronUp,
   ChevronDown,
+  CircleDot,
 } from 'lucide-react';
 import Select from '@mui/material/Select';
+import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Slider from '@mui/material/Slider';
 import Tooltip from '@mui/material/Tooltip';
@@ -58,6 +66,8 @@ export const LayersPanel: React.FC = () => {
     layers,
     activeLayerId,
     selectedLayerIds,
+    editingMaskLayerId,
+    setEditingMask,
     selectLayer,
     toggleVisibility,
     toggleLock,
@@ -71,6 +81,14 @@ export const LayersPanel: React.FC = () => {
 
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const [contextMenu, setContextMenu] = React.useState<{ mouseX: number; mouseY: number; layerId: string } | null>(null);
+
+  const handleContextMenu = (event: React.MouseEvent, layerId: string) => {
+    event.preventDefault();
+    setContextMenu({ mouseX: event.clientX, mouseY: event.clientY, layerId });
+  };
+
+  const handleContextMenuClose = () => setContextMenu(null);
 
   const activeLayer = layers.find((l) => l.id === activeLayerId);
 
@@ -235,6 +253,7 @@ export const LayersPanel: React.FC = () => {
                 key={layer.id}
                 onClick={(e) => selectLayer(layer.id, e.shiftKey || e.ctrlKey || e.metaKey)}
                 onDoubleClick={() => startRenaming(layer)}
+                onContextMenu={(e) => handleContextMenu(e, layer.id)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -293,6 +312,34 @@ export const LayersPanel: React.FC = () => {
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                   {getLayerIcon(layer)}
                 </div>
+
+                {/* Layer Mask thumbnail/indicator */}
+                {layer.mask && (
+                  <div
+                    style={{
+                      width: 20,
+                      height: 20,
+                      border: editingMaskLayerId === layer.id
+                        ? '2px solid #ff00ff'
+                        : '1px solid #666',
+                      borderRadius: 2,
+                      backgroundColor: '#333',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      opacity: layer.mask.enabled ? 1 : 0.4,
+                      flexShrink: 0,
+                    }}
+                    title={editingMaskLayerId === layer.id ? 'Editing mask (click layer name to exit)' : 'Click to edit mask'}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingMask(editingMaskLayerId === layer.id ? null : layer.id);
+                    }}
+                  >
+                    <CircleDot size={12} color={layer.mask.enabled ? '#ffffff' : '#666'} />
+                  </div>
+                )}
 
                 {/* Layer Name / Inline Editor */}
                 <div style={{ flex: 1, overflow: 'hidden' }}>
@@ -459,6 +506,68 @@ export const LayersPanel: React.FC = () => {
           </Tooltip>
         </div>
       </div>
+
+      {/* Layer Context Menu */}
+      <Menu
+        open={contextMenu !== null}
+        onClose={handleContextMenuClose}
+        anchorReference="anchorPosition"
+        anchorPosition={
+          contextMenu !== null
+            ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
+            : undefined
+        }
+      >
+        {(() => {
+          const targetLayer = layers.find((l) => l.id === contextMenu?.layerId);
+          return [
+            !targetLayer?.mask && (
+              <MenuItem key="ctx-add-mask" onClick={() => {
+                handleContextMenuClose();
+                if (contextMenu?.layerId && doc) {
+                  const cmd = new AddMaskCommand(contextMenu.layerId, doc.width, doc.height);
+                  executeCommand(cmd);
+                }
+              }}>
+                Add Layer Mask
+              </MenuItem>
+            ),
+            targetLayer?.mask && (
+              <MenuItem key="ctx-del-mask" onClick={() => {
+                handleContextMenuClose();
+                if (contextMenu?.layerId && targetLayer.mask) {
+                  const cmd = new RemoveMaskCommand(contextMenu.layerId, targetLayer.mask);
+                  executeCommand(cmd);
+                }
+              }}>
+                Delete Layer Mask
+              </MenuItem>
+            ),
+            targetLayer?.mask && (
+              <MenuItem key="ctx-toggle-mask" onClick={() => {
+                handleContextMenuClose();
+                if (contextMenu?.layerId) {
+                  const cmd = new ToggleMaskEnabledCommand(contextMenu.layerId);
+                  executeCommand(cmd);
+                }
+              }}>
+                {targetLayer.mask.enabled ? 'Disable' : 'Enable'} Layer Mask
+              </MenuItem>
+            ),
+            targetLayer?.mask && (
+              <MenuItem key="ctx-apply-mask" onClick={() => {
+                handleContextMenuClose();
+                if (contextMenu?.layerId && targetLayer.mask) {
+                  const cmd = new ApplyMaskCommand(contextMenu.layerId, targetLayer.mask);
+                  executeCommand(cmd);
+                }
+              }}>
+                Apply Layer Mask
+              </MenuItem>
+            ),
+          ].filter(Boolean);
+        })()}
+      </Menu>
     </div>
   );
 };

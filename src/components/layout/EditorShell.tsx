@@ -8,9 +8,11 @@ import { useDocumentStore } from '@/store/documentStore';
 import { useViewStore } from '@/store/viewStore';
 import { useUIStore } from '@/store/uiStore';
 import { useLayerStore } from '@/store/layerStore';
+import { useSelectionStore } from '@/store/selectionStore';
 import { isFormInputElement } from '@/lib/keyboard/shortcutRegistry';
 import { PxfSerializer } from '@/editor/export/PxfSerializer';
 import { DeleteLayerCommand } from '@/editor/commands/LayerCommands';
+import { AddMaskCommand } from '@/editor/commands/MaskCommands';
 import { TopMenuBar } from './TopMenuBar';
 import { OptionsBar } from './OptionsBar';
 import { DocumentTabs } from './DocumentTabs';
@@ -53,6 +55,7 @@ export const EditorShell: React.FC = () => {
     toggleRulers,
     toggleGuides,
     toggleGrid,
+    toggleSnapEnabled,
   } = useViewStore();
 
   const {
@@ -62,7 +65,16 @@ export const EditorShell: React.FC = () => {
     toggleRightSidebar,
   } = useUIStore();
 
-  const { activeLayerId, layers, duplicateLayer, selectedLayerIds } = useLayerStore();
+  const {
+    activeLayerId,
+    layers,
+    duplicateLayer,
+    selectedLayerIds,
+    editingMaskLayerId,
+    setEditingMask,
+  } = useLayerStore();
+
+  const { selectAll, clearSelection, invertSelection } = useSelectionStore();
 
   // Keyboard shortcut handler
   const handleKeyDown = useCallback(
@@ -139,6 +151,56 @@ export const EditorShell: React.FC = () => {
           duplicateLayer(activeLayerId);
           showToast('Layer duplicated', 'info');
         }
+        return;
+      }
+
+      // Select All
+      if (isCtrlOrCmd && !e.shiftKey && key === 'a') {
+        e.preventDefault();
+        if (doc) selectAll(doc.width, doc.height);
+        return;
+      }
+
+      // Deselect Selection
+      if (isCtrlOrCmd && key === 'd') {
+        e.preventDefault();
+        clearSelection();
+        return;
+      }
+
+      // Inverse Selection
+      if (isCtrlOrCmd && e.shiftKey && key === 'i') {
+        e.preventDefault();
+        if (doc) invertSelection(doc.width, doc.height);
+        return;
+      }
+
+      // Add Layer Mask
+      if (isCtrlOrCmd && e.shiftKey && key === 'm') {
+        e.preventDefault();
+        const activeLayer = layers.find((l) => l.id === activeLayerId);
+        if (activeLayerId && activeLayer && !activeLayer.mask && doc) {
+          const cmd = new AddMaskCommand(activeLayerId, doc.width, doc.height);
+          useHistoryStore.getState().executeCommand(cmd);
+          showToast('Added layer mask', 'success');
+        }
+        return;
+      }
+
+      // Toggle Mask Editing
+      if (key === '\\') {
+        const activeLayer = layers.find((l) => l.id === activeLayerId);
+        if (activeLayer?.mask) {
+          e.preventDefault();
+          setEditingMask(editingMaskLayerId === activeLayer.id ? null : activeLayer.id);
+        }
+        return;
+      }
+
+      // Toggle Snap
+      if (isCtrlOrCmd && e.shiftKey && key === ';') {
+        e.preventDefault();
+        toggleSnapEnabled();
         return;
       }
 
@@ -279,6 +341,12 @@ export const EditorShell: React.FC = () => {
       resetColors,
       setActiveTool,
       doc,
+      selectAll,
+      clearSelection,
+      invertSelection,
+      toggleSnapEnabled,
+      editingMaskLayerId,
+      setEditingMask,
     ]
   );
 

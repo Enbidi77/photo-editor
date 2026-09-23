@@ -6,6 +6,7 @@ interface LayerState {
   layers: Layer[];
   activeLayerId: string | null;
   selectedLayerIds: string[];
+  editingMaskLayerId: string | null; // which layer's mask is being painted
 
   // Actions
   setLayers: (layers: Layer[]) => void;
@@ -30,12 +31,22 @@ interface LayerState {
   setLayerBlendMode: (id: string, blendMode: BlendMode) => void;
   renameLayer: (id: string, name: string) => void;
   clearLayers: () => void;
+
+  // Mask actions
+  addMask: (layerId: string, docWidth: number, docHeight: number) => void;
+  removeMask: (layerId: string) => void;
+  toggleMaskEnabled: (layerId: string) => void;
+  toggleMaskLinked: (layerId: string) => void;
+  updateMaskData: (layerId: string, dataUrl: string) => void;
+  setEditingMask: (layerId: string | null) => void;
+  applyMask: (layerId: string) => void;
 }
 
 export const useLayerStore = create<LayerState>((set, get) => ({
   layers: [],
   activeLayerId: null,
   selectedLayerIds: [],
+  editingMaskLayerId: null,
 
   setLayers: (layers) =>
     set({
@@ -209,5 +220,96 @@ export const useLayerStore = create<LayerState>((set, get) => ({
     get().updateLayer(id, { name });
   },
 
-  clearLayers: () => set({ layers: [], activeLayerId: null, selectedLayerIds: [] }),
+  clearLayers: () => set({ layers: [], activeLayerId: null, selectedLayerIds: [], editingMaskLayerId: null }),
+
+  // Mask actions
+  addMask: (layerId, docWidth, docHeight) => {
+    let dataUrl = '';
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = docWidth;
+      canvas.height = docHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, docWidth, docHeight);
+      }
+      dataUrl = canvas.toDataURL('image/png') || '';
+    } catch {
+      // Fallback for non-browser/jsdom environments without canvas support
+      dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+    }
+    if (!dataUrl) {
+      dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+    }
+
+    const { layers } = get();
+    set({
+      layers: layers.map((l) =>
+        l.id === layerId
+          ? { ...l, mask: { enabled: true, linked: true, dataUrl } }
+          : l
+      ),
+    });
+  },
+
+  removeMask: (layerId) => {
+    const { layers, editingMaskLayerId } = get();
+    set({
+      layers: layers.map((l) => {
+        if (l.id !== layerId) return l;
+        const { mask: _mask, ...rest } = l;
+        return rest as Layer;
+      }),
+      editingMaskLayerId: editingMaskLayerId === layerId ? null : editingMaskLayerId,
+    });
+  },
+
+  toggleMaskEnabled: (layerId) => {
+    const { layers } = get();
+    set({
+      layers: layers.map((l) => {
+        if (l.id !== layerId || !l.mask) return l;
+        return { ...l, mask: { ...l.mask, enabled: !l.mask.enabled } };
+      }),
+    });
+  },
+
+  toggleMaskLinked: (layerId) => {
+    const { layers } = get();
+    set({
+      layers: layers.map((l) => {
+        if (l.id !== layerId || !l.mask) return l;
+        return { ...l, mask: { ...l.mask, linked: !l.mask.linked } };
+      }),
+    });
+  },
+
+  updateMaskData: (layerId, dataUrl) => {
+    const { layers } = get();
+    set({
+      layers: layers.map((l) => {
+        if (l.id !== layerId || !l.mask) return l;
+        return { ...l, mask: { ...l.mask, dataUrl } };
+      }),
+    });
+  },
+
+  setEditingMask: (layerId) => {
+    set({ editingMaskLayerId: layerId });
+  },
+
+  applyMask: (layerId) => {
+    // Apply mask is a destructive action — remove the mask
+    // The actual pixel flattening is handled by the command that calls this
+    const { layers, editingMaskLayerId } = get();
+    set({
+      layers: layers.map((l) => {
+        if (l.id !== layerId) return l;
+        const { mask: _mask, ...rest } = l;
+        return rest as Layer;
+      }),
+      editingMaskLayerId: editingMaskLayerId === layerId ? null : editingMaskLayerId,
+    });
+  },
 }));

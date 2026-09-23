@@ -18,6 +18,18 @@ export type BlendMode =
   | 'color'
   | 'luminosity';
 
+export interface MaskData {
+  enabled: boolean;   // whether mask is actively applied to rendering
+  linked: boolean;    // whether mask moves with the layer
+  dataUrl: string;    // grayscale image data (white = visible, black = hidden)
+}
+
+export const DEFAULT_MASK_DATA: MaskData = {
+  enabled: true,
+  linked: true,
+  dataUrl: '', // empty string = fully white (all visible) — initialized at creation time
+};
+
 export interface BaseLayer {
   id: string;
   type: LayerType;
@@ -35,6 +47,7 @@ export interface BaseLayer {
   scaleY?: number;
   zIndex: number;
   parentId: string | null;
+  mask?: MaskData; // optional non-destructive layer mask
 }
 
 export interface ImageAdjustments {
@@ -50,6 +63,11 @@ export interface ImageAdjustments {
   sepia: boolean;
   sharpen: boolean;
   pixelate: number; // 0 (off) or block size (e.g. 8)
+  vignetteAmount: number; // 0 (off) to 100, default 0
+  vignetteMidpoint: number; // 0 to 100, default 50
+  vignetteRoundness: number; // 0 to 100, default 50
+  chromaticShift: number; // 0 (off) to 50, default 0
+  chromaticDirection: number; // 0 to 360, default 0
 }
 
 export const DEFAULT_ADJUSTMENTS: ImageAdjustments = {
@@ -65,6 +83,11 @@ export const DEFAULT_ADJUSTMENTS: ImageAdjustments = {
   sepia: false,
   sharpen: false,
   pixelate: 0,
+  vignetteAmount: 0,
+  vignetteMidpoint: 50,
+  vignetteRoundness: 50,
+  chromaticShift: 0,
+  chromaticDirection: 0,
 };
 
 export interface ImageLayer extends BaseLayer {
@@ -89,16 +112,20 @@ export interface TextLayer extends BaseLayer {
   underline: boolean;
 }
 
+import { ShapeGradientConfig } from '@/lib/image/gradient';
+
 export type ShapeKind = 'rect' | 'rounded-rect' | 'circle' | 'ellipse' | 'polygon' | 'line';
 
 export interface ShapeLayer extends BaseLayer {
   type: 'SHAPE';
   shapeKind: ShapeKind;
   fill: string;
-  stroke: string;
-  strokeWidth: number;
-  cornerRadius: number;
+  stroke?: string;
+  strokeWidth?: number;
+  cornerRadius?: number;
   sides?: number; // for polygon
+  fillType?: 'color' | 'gradient';
+  gradient?: ShapeGradientConfig;
 }
 
 export interface StrokePoint {
@@ -118,6 +145,7 @@ export interface PaintPath {
 export interface PaintLayer extends BaseLayer {
   type: 'PAINT';
   paths: PaintPath[];
+  dataUrl?: string;
 }
 
 export interface AdjustmentLayer extends BaseLayer {

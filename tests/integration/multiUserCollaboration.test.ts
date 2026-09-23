@@ -60,7 +60,7 @@ describe('Multi-User Real-Time Collaboration Integration Flow', () => {
     const userBLayers = useLayerStore.getState().layers;
     expect(userBLayers).toHaveLength(1);
     expect(userBLayers[0].id).toBe('layer-collab-alpha');
-    expect(userBLayers[0].fill).toBe('#3b82f6');
+    expect((userBLayers[0] as ShapeLayer).fill).toBe('#3b82f6');
 
     // 3. User B moves/transforms the layer
     operationBridge.setContext('proj-collab-1', 'user-B');

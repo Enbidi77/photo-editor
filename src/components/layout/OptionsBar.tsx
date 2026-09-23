@@ -17,17 +17,32 @@ import {
   Maximize,
   ZoomIn,
   ZoomOut,
+  ToggleLeft,
+  ToggleRight,
+  Magnet,
+  CircleDot,
+  RotateCw,
+  Columns2,
+  Diamond,
+  Minus,
 } from 'lucide-react';
 import Slider from '@mui/material/Slider';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import Button from '@mui/material/Button';
+import {
+  GRADIENT_PRESETS,
+  GradientType,
+  resolveGradientStops,
+  formatCssGradient,
+  DEFAULT_GRADIENT_OPTIONS,
+} from '@/lib/image/gradient';
 
 export const OptionsBar: React.FC = () => {
-  const { activeTool, options, updateToolOptions, foregroundColor, setForegroundColor } = useToolStore();
-  const { activeLayerId, layers, updateLayer } = useLayerStore();
+  const { activeTool, options, updateToolOptions, foregroundColor, setForegroundColor, backgroundColor } = useToolStore();
+  const { activeLayerId, layers, updateLayer, editingMaskLayerId, setEditingMask } = useLayerStore();
   const { document: doc } = useDocumentStore();
-  const { zoom, setZoom, resetZoom, fitToViewport } = useViewStore();
+  const { zoom, setZoom, resetZoom, fitToViewport, snapEnabled, setSnapEnabled } = useViewStore();
 
   const activeLayer = layers.find((l) => l.id === activeLayerId);
 
@@ -145,6 +160,29 @@ export const OptionsBar: React.FC = () => {
           >
             Center in Canvas
           </Button>
+
+          <div style={{ width: 1, height: 16, backgroundColor: editorTokens.border.subtle }} />
+
+          <button
+            type="button"
+            onClick={() => setSnapEnabled(!snapEnabled)}
+            title={snapEnabled ? 'Disable Snapping' : 'Enable Snapping'}
+            style={{
+              backgroundColor: snapEnabled ? editorTokens.accent.primary : 'transparent',
+              color: snapEnabled ? '#fff' : editorTokens.text.primary,
+              border: 'none',
+              padding: '2px 8px',
+              borderRadius: 2,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              fontSize: '0.68rem',
+            }}
+          >
+            <Magnet size={12} />
+            Snap
+          </button>
         </div>
       )}
 
@@ -217,6 +255,38 @@ export const OptionsBar: React.FC = () => {
               %
             </span>
           </div>
+
+          {/* Mask editing indicator */}
+          {editingMaskLayerId && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+              <div style={{
+                backgroundColor: '#ff00ff33',
+                border: '1px solid #ff00ff',
+                borderRadius: 3,
+                padding: '2px 8px',
+                fontSize: '0.68rem',
+                color: '#ff88ff',
+                fontWeight: 600,
+              }}>
+                Editing Mask
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingMask(null)}
+                style={{
+                  backgroundColor: 'transparent',
+                  border: `1px solid ${editorTokens.border.subtle}`,
+                  color: editorTokens.text.primary,
+                  padding: '2px 8px',
+                  borderRadius: 2,
+                  cursor: 'pointer',
+                  fontSize: '0.68rem',
+                }}
+              >
+                Done
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -497,6 +567,157 @@ export const OptionsBar: React.FC = () => {
         </div>
       )}
 
+      {/* GRADIENT TOOL OPTIONS */}
+      {activeTool === 'gradient' && (() => {
+        const gradOpts = options.gradient || DEFAULT_GRADIENT_OPTIONS;
+        const resolvedStops = resolveGradientStops(
+          gradOpts.presetId,
+          foregroundColor,
+          backgroundColor,
+          gradOpts.stops
+        );
+
+        const types: { id: GradientType; label: string; icon: React.ReactNode }[] = [
+          { id: 'linear', label: 'Linear', icon: <Minus size={13} style={{ transform: 'rotate(-45deg)' }} /> },
+          { id: 'radial', label: 'Radial', icon: <CircleDot size={13} /> },
+          { id: 'angle', label: 'Angle', icon: <RotateCw size={13} /> },
+          { id: 'reflected', label: 'Reflected', icon: <Columns2 size={13} /> },
+          { id: 'diamond', label: 'Diamond', icon: <Diamond size={13} /> },
+        ];
+
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            {/* Active Gradient Preview */}
+            <div
+              title="Active Gradient"
+              style={{
+                width: 48,
+                height: 20,
+                borderRadius: 2,
+                border: `1px solid ${editorTokens.border.subtle}`,
+                background: formatCssGradient(resolvedStops),
+                flexShrink: 0,
+              }}
+            />
+
+            {/* Presets Swatches */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ color: editorTokens.text.secondary }}>Presets:</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 3, maxWidth: 220, overflowX: 'auto' }}>
+                {GRADIENT_PRESETS.map((preset) => {
+                  const pStops = resolveGradientStops(preset.id, foregroundColor, backgroundColor);
+                  const isSelected = gradOpts.presetId === preset.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      title={preset.name}
+                      onClick={() =>
+                        updateToolOptions('gradient', {
+                          presetId: preset.id,
+                          stops: pStops,
+                        })
+                      }
+                      style={{
+                        width: 22,
+                        height: 18,
+                        borderRadius: 2,
+                        border: isSelected ? '2px solid #0078d4' : `1px solid ${editorTokens.border.subtle}`,
+                        background: formatCssGradient(pStops),
+                        cursor: 'pointer',
+                        padding: 0,
+                        outline: 'none',
+                        flexShrink: 0,
+                        boxShadow: isSelected ? '0 0 0 1px #ffffff' : 'none',
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Type Selector (5-button group) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ color: editorTokens.text.secondary }}>Type:</span>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  backgroundColor: editorTokens.bg.input,
+                  borderRadius: 3,
+                  padding: 1,
+                  border: `1px solid ${editorTokens.border.subtle}`,
+                }}
+              >
+                {types.map((t) => {
+                  const isActive = (gradOpts.type || 'linear') === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      title={`${t.label} Gradient`}
+                      onClick={() => updateToolOptions('gradient', { type: t.id })}
+                      style={{
+                        width: 24,
+                        height: 20,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: isActive ? editorTokens.accent.primary : 'transparent',
+                        color: isActive ? '#ffffff' : editorTokens.text.secondary,
+                        border: 'none',
+                        borderRadius: 2,
+                        cursor: 'pointer',
+                        padding: 0,
+                      }}
+                    >
+                      {t.icon}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Opacity Slider */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ color: editorTokens.text.secondary }}>Opacity:</span>
+              <Slider
+                value={Math.round((gradOpts.opacity ?? 1) * 100)}
+                min={1}
+                max={100}
+                onChange={(_, val) =>
+                  updateToolOptions('gradient', { opacity: (val as number) / 100 })
+                }
+                sx={{ width: 64, height: 2 }}
+              />
+              <span style={{ width: 32, fontSize: '0.68rem', color: editorTokens.text.muted }}>
+                {Math.round((gradOpts.opacity ?? 1) * 100)}%
+              </span>
+            </div>
+
+            {/* Reverse Toggle */}
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                cursor: 'pointer',
+                color: editorTokens.text.secondary,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={gradOpts.reverse ?? false}
+                onChange={(e) => updateToolOptions('gradient', { reverse: e.target.checked })}
+                style={{ width: 12, height: 12, cursor: 'pointer' }}
+              />
+              Reverse
+            </label>
+          </div>
+        );
+      })()}
+
       {/* MARQUEE TOOL OPTIONS */}
       {activeTool === 'marquee' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -511,6 +732,64 @@ export const OptionsBar: React.FC = () => {
             <MenuItem value="rect">Rectangular</MenuItem>
             <MenuItem value="ellipse">Elliptical</MenuItem>
           </Select>
+        </div>
+      )}
+
+      {/* LASSO TOOL OPTIONS */}
+      {activeTool === 'lasso' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ color: editorTokens.text.secondary }}>Freehand selection — draw to select, release to close</span>
+        </div>
+      )}
+
+      {/* MAGIC WAND TOOL OPTIONS */}
+      {activeTool === 'magic-wand' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          {/* Tolerance */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ color: editorTokens.text.secondary }}>Tolerance:</span>
+            <input
+              type="number"
+              value={options.magicWand.tolerance}
+              min={0}
+              max={255}
+              onChange={(e) =>
+                updateToolOptions('magicWand', { tolerance: Math.max(0, Math.min(255, parseInt(e.target.value) || 0)) })
+              }
+              style={{
+                width: 44,
+                height: 22,
+                backgroundColor: editorTokens.bg.input,
+                border: `1px solid ${editorTokens.border.subtle}`,
+                color: editorTokens.text.primary,
+                fontSize: '0.72rem',
+                padding: '1px 4px',
+                borderRadius: 2,
+              }}
+            />
+          </div>
+
+          {/* Contiguous toggle */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', color: editorTokens.text.secondary }}>
+            <input
+              type="checkbox"
+              checked={options.magicWand.contiguous}
+              onChange={(e) => updateToolOptions('magicWand', { contiguous: e.target.checked })}
+              style={{ width: 12, height: 12 }}
+            />
+            Contiguous
+          </label>
+
+          {/* Sample All Layers toggle */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', color: editorTokens.text.secondary }}>
+            <input
+              type="checkbox"
+              checked={options.magicWand.sampleAllLayers}
+              onChange={(e) => updateToolOptions('magicWand', { sampleAllLayers: e.target.checked })}
+              style={{ width: 12, height: 12 }}
+            />
+            Sample All Layers
+          </label>
         </div>
       )}
 

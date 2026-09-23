@@ -10,7 +10,9 @@ export type FilterType =
   | 'pixelate'
   | 'brightness-contrast'
   | 'hue-saturation'
-  | 'exposure';
+  | 'exposure'
+  | 'vignette'
+  | 'chromatic-aberration';
 
 export interface FilterDefinition {
   id: FilterType;
@@ -30,4 +32,6 @@ export const AVAILABLE_FILTERS: FilterDefinition[] = [
   { id: 'invert', name: 'Invert Colors', category: 'Color & Tone', description: 'Invert every color channel (photo negative)' },
   { id: 'noise', name: 'Add Noise', category: 'Stylize', description: 'Introduce subtle film grain texture' },
   { id: 'pixelate', name: 'Pixelate / Mosaic', category: 'Stylize', description: 'Group pixels into large retro mosaic blocks' },
+  { id: 'vignette', name: 'Vignette', category: 'Stylize', description: 'Darken edges with configurable amount, midpoint, and roundness' },
+  { id: 'chromatic-aberration', name: 'Chromatic Aberration', category: 'Stylize', description: 'Offset RGB channels with configurable shift amount and direction' },
 ];

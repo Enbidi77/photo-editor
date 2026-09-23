@@ -26,13 +26,66 @@ export const FiltersDialog: React.FC = () => {
   const [initialAdjustments, setInitialAdjustments] = useState(activeLayer?.adjustments);
   const [paramValue, setParamValue] = useState(10);
 
+  // Vignette state
+  const [vignetteAmount, setVignetteAmount] = useState(50);
+  const [vignetteMidpoint, setVignetteMidpoint] = useState(50);
+  const [vignetteRoundness, setVignetteRoundness] = useState(50);
+
+  // Chromatic Aberration state
+  const [chromaticShift, setChromaticShift] = useState(10);
+  const [chromaticDirection, setChromaticDirection] = useState(0);
+
   useEffect(() => {
-    if (activeLayer) {
-      setInitialAdjustments({ ...activeLayer.adjustments });
-      if (activeFilterType === 'blur') setParamValue(10);
-      else if (activeFilterType === 'noise') setParamValue(20);
-      else if (activeFilterType === 'pixelate') setParamValue(8);
-      else setParamValue(1);
+    if (activeLayer && isOpen) {
+      const orig = { ...activeLayer.adjustments };
+      setInitialAdjustments(orig);
+
+      if (activeFilterType === 'blur') {
+        const val = 10;
+        setParamValue(val);
+        updateLayer(activeLayer.id, { adjustments: { ...orig, blur: val } });
+      } else if (activeFilterType === 'noise') {
+        const val = 20;
+        setParamValue(val);
+        updateLayer(activeLayer.id, { adjustments: { ...orig, noise: val / 100 } });
+      } else if (activeFilterType === 'pixelate') {
+        const val = 8;
+        setParamValue(val);
+        updateLayer(activeLayer.id, { adjustments: { ...orig, pixelate: val } });
+      } else if (activeFilterType === 'vignette') {
+        const amt = orig.vignetteAmount > 0 ? orig.vignetteAmount : 50;
+        const mid = orig.vignetteMidpoint ?? 50;
+        const rnd = orig.vignetteRoundness ?? 50;
+        setVignetteAmount(amt);
+        setVignetteMidpoint(mid);
+        setVignetteRoundness(rnd);
+        updateLayer(activeLayer.id, {
+          adjustments: {
+            ...orig,
+            vignetteAmount: amt,
+            vignetteMidpoint: mid,
+            vignetteRoundness: rnd,
+          },
+        });
+      } else if (activeFilterType === 'chromatic-aberration') {
+        const shift = orig.chromaticShift > 0 ? orig.chromaticShift : 10;
+        const dir = orig.chromaticDirection ?? 0;
+        setChromaticShift(shift);
+        setChromaticDirection(dir);
+        updateLayer(activeLayer.id, {
+          adjustments: {
+            ...orig,
+            chromaticShift: shift,
+            chromaticDirection: dir,
+          },
+        });
+      } else if (activeFilterType === 'grayscale') {
+        updateLayer(activeLayer.id, { adjustments: { ...orig, grayscale: true } });
+      } else if (activeFilterType === 'invert') {
+        updateLayer(activeLayer.id, { adjustments: { ...orig, invert: true } });
+      } else if (activeFilterType === 'sepia') {
+        updateLayer(activeLayer.id, { adjustments: { ...orig, sepia: true } });
+      }
     }
   }, [isOpen, activeFilterType]);
 
@@ -50,15 +103,37 @@ export const FiltersDialog: React.FC = () => {
       next.noise = val / 100;
     } else if (activeFilterType === 'pixelate') {
       next.pixelate = val;
-    } else if (activeFilterType === 'grayscale') {
-      next.grayscale = true;
-    } else if (activeFilterType === 'invert') {
-      next.invert = true;
-    } else if (activeFilterType === 'sepia') {
-      next.sepia = true;
     }
 
     updateLayer(activeLayer.id, { adjustments: next });
+  };
+
+  const handleVignetteChange = (amt: number, mid: number, rnd: number) => {
+    setVignetteAmount(amt);
+    setVignetteMidpoint(mid);
+    setVignetteRoundness(rnd);
+    if (!initialAdjustments) return;
+    updateLayer(activeLayer.id, {
+      adjustments: {
+        ...initialAdjustments,
+        vignetteAmount: amt,
+        vignetteMidpoint: mid,
+        vignetteRoundness: rnd,
+      },
+    });
+  };
+
+  const handleChromaticChange = (shift: number, dir: number) => {
+    setChromaticShift(shift);
+    setChromaticDirection(dir);
+    if (!initialAdjustments) return;
+    updateLayer(activeLayer.id, {
+      adjustments: {
+        ...initialAdjustments,
+        chromaticShift: shift,
+        chromaticDirection: dir,
+      },
+    });
   };
 
   const handleCommit = () => {
@@ -155,6 +230,82 @@ export const FiltersDialog: React.FC = () => {
               step={2}
               onChange={(_, v) => handleApplyPreview(v as number)}
             />
+          </div>
+        )}
+
+        {/* Vignette sliders */}
+        {activeFilterType === 'vignette' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: editorTokens.text.secondary }}>
+                <span>Amount:</span>
+                <span>{vignetteAmount}%</span>
+              </div>
+              <Slider
+                value={vignetteAmount}
+                min={0}
+                max={100}
+                onChange={(_, v) => handleVignetteChange(v as number, vignetteMidpoint, vignetteRoundness)}
+              />
+            </div>
+
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: editorTokens.text.secondary }}>
+                <span>Midpoint:</span>
+                <span>{vignetteMidpoint}%</span>
+              </div>
+              <Slider
+                value={vignetteMidpoint}
+                min={0}
+                max={100}
+                onChange={(_, v) => handleVignetteChange(vignetteAmount, v as number, vignetteRoundness)}
+              />
+            </div>
+
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: editorTokens.text.secondary }}>
+                <span>Roundness:</span>
+                <span>{vignetteRoundness}%</span>
+              </div>
+              <Slider
+                value={vignetteRoundness}
+                min={0}
+                max={100}
+                onChange={(_, v) => handleVignetteChange(vignetteAmount, vignetteMidpoint, v as number)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Chromatic Aberration sliders */}
+        {activeFilterType === 'chromatic-aberration' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: editorTokens.text.secondary }}>
+                <span>Shift Amount:</span>
+                <span>{chromaticShift} px</span>
+              </div>
+              <Slider
+                value={chromaticShift}
+                min={0}
+                max={50}
+                onChange={(_, v) => handleChromaticChange(v as number, chromaticDirection)}
+              />
+            </div>
+
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: editorTokens.text.secondary }}>
+                <span>Direction:</span>
+                <span>{chromaticDirection}°</span>
+              </div>
+              <Slider
+                value={chromaticDirection}
+                min={0}
+                max={360}
+                step={5}
+                onChange={(_, v) => handleChromaticChange(chromaticShift, v as number)}
+              />
+            </div>
           </div>
         )}
 

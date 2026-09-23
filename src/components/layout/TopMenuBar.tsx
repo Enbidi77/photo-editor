@@ -16,6 +16,7 @@ import { ShareDialog } from '@/components/collaboration/ShareDialog';
 import { PxfSerializer } from '@/editor/export/PxfSerializer';
 import { ImageLoader } from '@/lib/image/imageLoader';
 import { AddLayerCommand, DeleteLayerCommand } from '@/editor/commands/LayerCommands';
+import { AddMaskCommand, RemoveMaskCommand, ToggleMaskEnabledCommand, ApplyMaskCommand } from '@/editor/commands/MaskCommands';
 import { ImageLayer, DEFAULT_ADJUSTMENTS } from '@/types/layer';
 import { editorTokens } from '@/theme/palette';
 import { FilterType } from '@/types/filters';
@@ -46,6 +47,7 @@ export const TopMenuBar: React.FC = () => {
     toggleVisibility,
     toggleLock,
     clearLayers,
+    addMask,
   } = useLayerStore();
   const { undo, redo, canUndo, canRedo } = useHistoryStore();
   const {
@@ -59,9 +61,17 @@ export const TopMenuBar: React.FC = () => {
     showRulers,
     showGuides,
     showGrid,
+    toggleSnapEnabled,
+    snapEnabled,
+    setSnapToLayers,
+    setSnapToGuides,
+    setSnapToDocumentBounds,
+    snapToLayers,
+    snapToGuides,
+    snapToDocumentBounds,
   } = useViewStore();
   const { openDialog, setCommandPaletteOpen, showToast, setActivePanel } = useUIStore();
-  const { clearSelection } = useSelectionStore();
+  const { clearSelection, selectAll, invertSelection } = useSelectionStore();
 
   const activeLayer = layers.find((l) => l.id === activeLayerId);
 
@@ -533,10 +543,52 @@ export const TopMenuBar: React.FC = () => {
           >
             <Typography variant="inherit">Toggle Lock</Typography>
           </MenuItem>,
+          <Divider key="mask-divider" sx={{ my: 0.5 }} />,
+          <MenuItem key="mask-add" disabled={!activeLayer || !!activeLayer.mask} onClick={() => {
+            handleMenuClose();
+            if (activeLayerId && doc) {
+              const cmd = new AddMaskCommand(activeLayerId, doc.width, doc.height);
+              useHistoryStore.getState().executeCommand(cmd);
+            }
+          }}>
+            <Typography variant="inherit" sx={{ flex: 1 }}>Add Layer Mask</Typography>
+            <Typography variant="caption" sx={{ color: editorTokens.text.muted }}>Ctrl+Shift+M</Typography>
+          </MenuItem>,
+          <MenuItem key="mask-delete" disabled={!activeLayer?.mask} onClick={() => {
+            handleMenuClose();
+            if (activeLayerId && activeLayer?.mask) {
+              const cmd = new RemoveMaskCommand(activeLayerId, activeLayer.mask);
+              useHistoryStore.getState().executeCommand(cmd);
+            }
+          }}>
+            <Typography variant="inherit">Delete Layer Mask</Typography>
+          </MenuItem>,
+          <MenuItem key="mask-toggle" disabled={!activeLayer?.mask} onClick={() => {
+            handleMenuClose();
+            if (activeLayerId) {
+              const cmd = new ToggleMaskEnabledCommand(activeLayerId);
+              useHistoryStore.getState().executeCommand(cmd);
+            }
+          }}>
+            <Typography variant="inherit">{activeLayer?.mask?.enabled ? 'Disable' : 'Enable'} Layer Mask</Typography>
+          </MenuItem>,
+          <MenuItem key="mask-apply" disabled={!activeLayer?.mask} onClick={() => {
+            handleMenuClose();
+            if (activeLayerId && activeLayer?.mask) {
+              const cmd = new ApplyMaskCommand(activeLayerId, activeLayer.mask);
+              useHistoryStore.getState().executeCommand(cmd);
+            }
+          }}>
+            <Typography variant="inherit">Apply Layer Mask</Typography>
+          </MenuItem>,
         ]}
 
         {/* SELECT MENU */}
         {activeMenu === 'select' && [
+          <MenuItem key="sel-all" onClick={() => { handleMenuClose(); if (doc) selectAll(doc.width, doc.height); }}>
+            <Typography variant="inherit" sx={{ flex: 1 }}>Select All</Typography>
+            <Typography variant="caption" sx={{ color: editorTokens.text.muted }}>Ctrl+A</Typography>
+          </MenuItem>,
           <MenuItem
             key="deselect"
             onClick={() => {
@@ -546,6 +598,10 @@ export const TopMenuBar: React.FC = () => {
           >
             <Typography variant="inherit" sx={{ flex: 1 }}>Deselect</Typography>
             <Typography variant="caption" sx={{ color: editorTokens.text.muted }}>Ctrl+D</Typography>
+          </MenuItem>,
+          <MenuItem key="sel-inverse" onClick={() => { handleMenuClose(); if (doc) invertSelection(doc.width, doc.height); }}>
+            <Typography variant="inherit" sx={{ flex: 1 }}>Inverse</Typography>
+            <Typography variant="caption" sx={{ color: editorTokens.text.muted }}>Ctrl+Shift+I</Typography>
           </MenuItem>,
         ]}
 
@@ -620,6 +676,26 @@ export const TopMenuBar: React.FC = () => {
             }}
           >
             <Typography variant="inherit">Pixelate / Mosaic...</Typography>
+          </MenuItem>,
+          <MenuItem
+            key="vignette"
+            disabled={!activeLayer || activeLayer.type !== 'IMAGE'}
+            onClick={() => {
+              handleMenuClose();
+              openDialog('filters', 'vignette');
+            }}
+          >
+            <Typography variant="inherit">Vignette...</Typography>
+          </MenuItem>,
+          <MenuItem
+            key="chromatic-aberration"
+            disabled={!activeLayer || activeLayer.type !== 'IMAGE'}
+            onClick={() => {
+              handleMenuClose();
+              openDialog('filters', 'chromatic-aberration');
+            }}
+          >
+            <Typography variant="inherit">Chromatic Aberration...</Typography>
           </MenuItem>,
         ]}
 
@@ -701,6 +777,20 @@ export const TopMenuBar: React.FC = () => {
               {showGrid ? 'Hide Grid' : 'Show Grid'}
             </Typography>
             <Typography variant="caption" sx={{ color: editorTokens.text.muted }}>Ctrl+'</Typography>
+          </MenuItem>,
+          <Divider key="snap-divider" sx={{ my: 0.5 }} />,
+          <MenuItem key="snap-toggle" onClick={() => { handleMenuClose(); toggleSnapEnabled(); }}>
+            <Typography variant="inherit" sx={{ flex: 1 }}>{snapEnabled ? '✓ ' : ''}Snap Enabled</Typography>
+            <Typography variant="caption" sx={{ color: editorTokens.text.muted }}>Ctrl+Shift+;</Typography>
+          </MenuItem>,
+          <MenuItem key="snap-layers" disabled={!snapEnabled} onClick={() => { handleMenuClose(); setSnapToLayers(!snapToLayers); }}>
+            <Typography variant="inherit">{snapToLayers ? '✓ ' : ''}Snap to Layer Bounds</Typography>
+          </MenuItem>,
+          <MenuItem key="snap-guides" disabled={!snapEnabled} onClick={() => { handleMenuClose(); setSnapToGuides(!snapToGuides); }}>
+            <Typography variant="inherit">{snapToGuides ? '✓ ' : ''}Snap to Guides</Typography>
+          </MenuItem>,
+          <MenuItem key="snap-doc" disabled={!snapEnabled} onClick={() => { handleMenuClose(); setSnapToDocumentBounds(!snapToDocumentBounds); }}>
+            <Typography variant="inherit">{snapToDocumentBounds ? '✓ ' : ''}Snap to Document Bounds</Typography>
           </MenuItem>,
         ]}
 

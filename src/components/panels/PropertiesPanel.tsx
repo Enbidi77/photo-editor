@@ -7,6 +7,14 @@ import { useHistoryStore } from '@/store/historyStore';
 import { Layer, ImageLayer, TextLayer, ShapeLayer, DEFAULT_ADJUSTMENTS } from '@/types/layer';
 import { UpdateLayerPropertiesCommand } from '@/editor/commands/LayerCommands';
 import { editorTokens } from '@/theme/palette';
+import {
+  GRADIENT_PRESETS,
+  GradientType,
+  ShapeGradientConfig,
+  formatCssGradient,
+  resolveGradientStops,
+} from '@/lib/image/gradient';
+import { useToolStore } from '@/store/toolStore';
 import Slider from '@mui/material/Slider';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
@@ -18,6 +26,7 @@ export const PropertiesPanel: React.FC = () => {
   const { document: doc, updateDocument } = useDocumentStore();
   const { layers, activeLayerId, updateLayer } = useLayerStore();
   const { executeCommand } = useHistoryStore();
+  const { foregroundColor, backgroundColor } = useToolStore();
 
   const activeLayer = layers.find((l) => l.id === activeLayerId);
 
@@ -325,30 +334,256 @@ export const PropertiesPanel: React.FC = () => {
           )}
 
           {/* SHAPE LAYER PROPERTIES */}
-          {activeLayer.type === 'SHAPE' && (
-            <div>
-              <div style={sectionHeaderSx}>Shape Properties</div>
-              <div style={rowSx}>
-                <span style={labelSx}>Fill:</span>
-                <div
-                  style={{
-                    width: 24,
-                    height: 24,
-                    backgroundColor: (activeLayer as ShapeLayer).fill,
-                    border: '1px solid #ffffff',
-                    borderRadius: 2,
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => {
-                    const input = document.createElement('input');
-                    input.type = 'color';
-                    input.value = (activeLayer as ShapeLayer).fill;
-                    input.onchange = (e) =>
-                      handleUpdate({ fill: (e.target as HTMLInputElement).value } as Partial<ShapeLayer>);
-                    input.click();
-                  }}
-                />
-              </div>
+          {activeLayer.type === 'SHAPE' && (() => {
+            const shapeLayer = activeLayer as ShapeLayer;
+            const fillType = shapeLayer.fillType || 'color';
+            const shapeGradient = shapeLayer.gradient || {
+              type: 'linear' as GradientType,
+              stops: [
+                { offset: 0, color: shapeLayer.fill || '#0078d4' },
+                { offset: 1, color: '#ffffff' },
+              ],
+              reverse: false,
+              opacity: 1,
+            };
+
+            const shapeStops = shapeGradient.stops && shapeGradient.stops.length > 0
+              ? shapeGradient.stops
+              : [
+                  { offset: 0, color: shapeLayer.fill || '#0078d4' },
+                  { offset: 1, color: '#ffffff' },
+                ];
+
+            return (
+              <div>
+                <div style={sectionHeaderSx}>Shape Properties</div>
+
+                {/* Fill Mode Toggle */}
+                <div style={rowSx}>
+                  <span style={labelSx}>Fill Mode:</span>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdate({ fillType: 'color' } as Partial<ShapeLayer>, 'Fill Mode: Solid')}
+                      style={{
+                        padding: '2px 8px',
+                        fontSize: '0.68rem',
+                        borderRadius: 2,
+                        border: `1px solid ${fillType === 'color' ? '#0078d4' : editorTokens.border.subtle}`,
+                        backgroundColor: fillType === 'color' ? editorTokens.accent.primary : editorTokens.bg.input,
+                        color: fillType === 'color' ? '#ffffff' : editorTokens.text.secondary,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Solid
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleUpdate(
+                          {
+                            fillType: 'gradient',
+                            gradient: shapeGradient,
+                          } as Partial<ShapeLayer>,
+                          'Fill Mode: Gradient'
+                        )
+                      }
+                      style={{
+                        padding: '2px 8px',
+                        fontSize: '0.68rem',
+                        borderRadius: 2,
+                        border: `1px solid ${fillType === 'gradient' ? '#0078d4' : editorTokens.border.subtle}`,
+                        backgroundColor: fillType === 'gradient' ? editorTokens.accent.primary : editorTokens.bg.input,
+                        color: fillType === 'gradient' ? '#ffffff' : editorTokens.text.secondary,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Gradient
+                    </button>
+                  </div>
+                </div>
+
+                {/* SOLID FILL COLOR */}
+                {fillType === 'color' && (
+                  <div style={rowSx}>
+                    <span style={labelSx}>Color:</span>
+                    <div
+                      style={{
+                        width: 24,
+                        height: 24,
+                        backgroundColor: shapeLayer.fill,
+                        border: '1px solid #ffffff',
+                        borderRadius: 2,
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => {
+                        const input = document.createElement('input');
+                        input.type = 'color';
+                        input.value = shapeLayer.fill;
+                        input.onchange = (e) =>
+                          handleUpdate({ fill: (e.target as HTMLInputElement).value } as Partial<ShapeLayer>);
+                        input.click();
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* GRADIENT FILL CONTROLS */}
+                {fillType === 'gradient' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+                    {/* Gradient Type */}
+                    <div style={rowSx}>
+                      <span style={labelSx}>Type:</span>
+                      <Select
+                        value={shapeGradient.type || 'linear'}
+                        onChange={(e) =>
+                          handleUpdate(
+                            {
+                              gradient: {
+                                ...shapeGradient,
+                                type: e.target.value as GradientType,
+                              },
+                            } as Partial<ShapeLayer>,
+                            'Gradient Type'
+                          )
+                        }
+                        sx={{ height: 22, fontSize: '0.7rem', minWidth: 100 }}
+                      >
+                        <MenuItem value="linear">Linear</MenuItem>
+                        <MenuItem value="radial">Radial</MenuItem>
+                        <MenuItem value="angle">Angle</MenuItem>
+                        <MenuItem value="reflected">Reflected</MenuItem>
+                        <MenuItem value="diamond">Diamond</MenuItem>
+                      </Select>
+                    </div>
+
+                    {/* Preset Swatches */}
+                    <div style={rowSx}>
+                      <span style={labelSx}>Presets:</span>
+                      <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', maxWidth: 140 }}>
+                        {GRADIENT_PRESETS.map((preset) => {
+                          const pStops = resolveGradientStops(preset.id, foregroundColor, backgroundColor);
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              title={preset.name}
+                              onClick={() =>
+                                handleUpdate(
+                                  {
+                                    gradient: {
+                                      ...shapeGradient,
+                                      presetId: preset.id,
+                                      stops: pStops,
+                                    },
+                                  } as Partial<ShapeLayer>,
+                                  'Change Gradient Preset'
+                                )
+                              }
+                              style={{
+                                width: 20,
+                                height: 16,
+                                borderRadius: 2,
+                                border: `1px solid ${editorTokens.border.subtle}`,
+                                background: formatCssGradient(pStops),
+                                cursor: 'pointer',
+                                padding: 0,
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Start Color & End Color custom pickers */}
+                    <div style={rowSx}>
+                      <span style={labelSx}>Colors:</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {/* Start Stop Color */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                          <span style={{ fontSize: '0.65rem', color: editorTokens.text.muted }}>1:</span>
+                          <div
+                            style={{
+                              width: 18,
+                              height: 18,
+                              backgroundColor: shapeStops[0]?.color || '#000000',
+                              border: '1px solid #777',
+                              borderRadius: 2,
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => {
+                              const input = document.createElement('input');
+                              input.type = 'color';
+                              input.value = shapeStops[0]?.color || '#000000';
+                              input.onchange = (e) => {
+                                const newStops = [...shapeStops];
+                                newStops[0] = { ...newStops[0], color: (e.target as HTMLInputElement).value };
+                                handleUpdate(
+                                  {
+                                    gradient: { ...shapeGradient, stops: newStops },
+                                  } as Partial<ShapeLayer>,
+                                  'Gradient Start Color'
+                                );
+                              };
+                              input.click();
+                            }}
+                          />
+                        </div>
+
+                        {/* End Stop Color */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                          <span style={{ fontSize: '0.65rem', color: editorTokens.text.muted }}>2:</span>
+                          <div
+                            style={{
+                              width: 18,
+                              height: 18,
+                              backgroundColor: shapeStops[shapeStops.length - 1]?.color || '#ffffff',
+                              border: '1px solid #777',
+                              borderRadius: 2,
+                              cursor: 'pointer',
+                            }}
+                            onClick={() => {
+                              const input = document.createElement('input');
+                              input.type = 'color';
+                              input.value = shapeStops[shapeStops.length - 1]?.color || '#ffffff';
+                              input.onchange = (e) => {
+                                const newStops = [...shapeStops];
+                                newStops[newStops.length - 1] = {
+                                  ...newStops[newStops.length - 1],
+                                  color: (e.target as HTMLInputElement).value,
+                                };
+                                handleUpdate(
+                                  {
+                                    gradient: { ...shapeGradient, stops: newStops },
+                                  } as Partial<ShapeLayer>,
+                                  'Gradient End Color'
+                                );
+                              };
+                              input.click();
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Reverse Toggle */}
+                    <div style={rowSx}>
+                      <span style={labelSx}>Reverse:</span>
+                      <Switch
+                        size="small"
+                        checked={shapeGradient.reverse ?? false}
+                        onChange={(e) =>
+                          handleUpdate(
+                            {
+                              gradient: { ...shapeGradient, reverse: e.target.checked },
+                            } as Partial<ShapeLayer>,
+                            'Reverse Gradient'
+                          )
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
 
               <div style={rowSx}>
                 <span style={labelSx}>Stroke:</span>
@@ -357,7 +592,7 @@ export const PropertiesPanel: React.FC = () => {
                     style={{
                       width: 24,
                       height: 24,
-                      backgroundColor: (activeLayer as ShapeLayer).stroke,
+                      backgroundColor: (activeLayer as ShapeLayer).stroke || '#000000',
                       border: '1px solid #777',
                       borderRadius: 2,
                       cursor: 'pointer',
@@ -365,7 +600,7 @@ export const PropertiesPanel: React.FC = () => {
                     onClick={() => {
                       const input = document.createElement('input');
                       input.type = 'color';
-                      input.value = (activeLayer as ShapeLayer).stroke;
+                      input.value = (activeLayer as ShapeLayer).stroke || '#000000';
                       input.onchange = (e) =>
                         handleUpdate({ stroke: (e.target as HTMLInputElement).value } as Partial<ShapeLayer>);
                       input.click();
@@ -408,9 +643,10 @@ export const PropertiesPanel: React.FC = () => {
                 </div>
               )}
             </div>
-          )}
+          );
+        })()}
 
-          {/* IMAGE LAYER ADJUSTMENTS & FILTERS */}
+        {/* IMAGE LAYER ADJUSTMENTS & FILTERS */}
           {activeLayer.type === 'IMAGE' && (
             <div>
               <div

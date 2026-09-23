@@ -39,12 +39,16 @@ export const SHORTCUT_REGISTRY: ShortcutDef[] = [
   { key: 'z', ctrlOrCmd: true, actionName: 'edit-undo', category: 'Edit & History', description: 'Undo' },
   { key: 'z', ctrlOrCmd: true, shift: true, actionName: 'edit-redo', category: 'Edit & History', description: 'Redo' },
   { key: 'y', ctrlOrCmd: true, actionName: 'edit-redo-y', category: 'Edit & History', description: 'Redo' },
+  { key: 'a', ctrlOrCmd: true, actionName: 'select-all', category: 'Edit & History', description: 'Select All' },
   { key: 'd', ctrlOrCmd: true, actionName: 'select-deselect', category: 'Edit & History', description: 'Deselect Selection' },
+  { key: 'i', ctrlOrCmd: true, shift: true, actionName: 'select-inverse', category: 'Edit & History', description: 'Inverse Selection' },
 
   // Layers
   { key: 'j', ctrlOrCmd: true, actionName: 'layer-duplicate', category: 'Layers', description: 'Duplicate Current Layer' },
   { key: 'delete', actionName: 'layer-delete', category: 'Layers', description: 'Delete Current Layer' },
   { key: 'backspace', actionName: 'layer-delete-bs', category: 'Layers', description: 'Delete Current Layer' },
+  { key: 'm', ctrlOrCmd: true, shift: true, actionName: 'layer-add-mask', category: 'Layers', description: 'Add Layer Mask' },
+  { key: '\\', actionName: 'mask-overlay-toggle', category: 'Layers', description: 'Toggle Mask Overlay' },
 
   // View & Navigation
   { key: '0', ctrlOrCmd: true, actionName: 'view-fit', category: 'View & Navigation', description: 'Fit Canvas to Screen' },
@@ -53,6 +57,7 @@ export const SHORTCUT_REGISTRY: ShortcutDef[] = [
   { key: '+', ctrlOrCmd: true, actionName: 'view-zoom-in-plus', category: 'View & Navigation', description: 'Zoom In' },
   { key: '-', ctrlOrCmd: true, actionName: 'view-zoom-out', category: 'View & Navigation', description: 'Zoom Out' },
   { key: ';', ctrlOrCmd: true, actionName: 'view-toggle-guides', category: 'View & Navigation', description: 'Toggle Guides' },
+  { key: ';', ctrlOrCmd: true, shift: true, actionName: 'view-toggle-snap', category: 'View & Navigation', description: 'Toggle Snap' },
   { key: "'", ctrlOrCmd: true, actionName: 'view-toggle-grid', category: 'View & Navigation', description: 'Toggle Grid' },
   { key: 'r', ctrlOrCmd: true, actionName: 'view-toggle-rulers', category: 'View & Navigation', description: 'Toggle Rulers' },
   { key: '?', actionName: 'help-shortcuts', category: 'View & Navigation', description: 'Keyboard Shortcuts Cheat Sheet' },
