@@ -5,9 +5,11 @@ import { useDocumentStore } from '@/store/documentStore';
 import { useViewStore } from '@/store/viewStore';
 import { useToolStore } from '@/store/toolStore';
 import { useUIStore } from '@/store/uiStore';
+import { useAutosaveStore } from '@/store/autosaveStore';
 import { editorTokens } from '@/theme/palette';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
+import { Check, Loader2, Cloud, WifiOff, AlertCircle } from 'lucide-react';
 
 const ZOOM_OPTIONS = [0.1, 0.25, 0.5, 0.67, 1, 1.5, 2, 3, 4, 8];
 
@@ -16,8 +18,45 @@ export const StatusBar: React.FC = () => {
   const { zoom, setZoom, cursorPos } = useViewStore();
   const { activeTool } = useToolStore();
   const { statusMessage } = useUIStore();
+  const { status: autosaveStatus, statusMessage: autosaveMessage, lastSavedTime } = useAutosaveStore();
 
   const zoomPercent = Math.round(zoom * 100);
+
+  const formatLastSaved = (ts: number | null): string => {
+    if (!ts) return '';
+    try {
+      return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch {
+      return '';
+    }
+  };
+
+  const getAutosaveIcon = () => {
+    switch (autosaveStatus) {
+      case 'saving':
+        return (
+          <Loader2
+            size={11}
+            style={{
+              animation: 'spin 1s linear infinite',
+              color: editorTokens.accent.primary,
+            }}
+          />
+        );
+      case 'saved-locally-waiting-sync':
+        return <Cloud size={11} style={{ color: '#eab308' }} />;
+      case 'offline':
+        return <WifiOff size={11} style={{ color: '#9ca3af' }} />;
+      case 'failed-retrying':
+        return <AlertCircle size={11} style={{ color: '#ef4444' }} />;
+      case 'saved':
+      default:
+        return <Check size={11} style={{ color: '#22c55e' }} />;
+    }
+  };
+
+  const formattedSavedTime = formatLastSaved(lastSavedTime);
+  const accessibleLabel = `Save status: ${autosaveMessage}${formattedSavedTime ? `. Last saved at ${formattedSavedTime}` : ''}`;
 
   const getToolHelp = () => {
     switch (activeTool) {
@@ -64,6 +103,13 @@ export const StatusBar: React.FC = () => {
         gap: 16,
       }}
     >
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+
       {/* Zoom Selector */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <Select
@@ -115,6 +161,38 @@ export const StatusBar: React.FC = () => {
       {/* Context / Tool Help */}
       <div style={{ flex: 1, color: editorTokens.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {getToolHelp()}
+      </div>
+
+      <div style={{ width: 1, height: 12, backgroundColor: editorTokens.border.subtle }} />
+
+      {/* Autosave Status Indicator */}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-label={accessibleLabel}
+        title={formattedSavedTime ? `Last saved: ${formattedSavedTime}` : autosaveMessage}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          fontSize: '0.68rem',
+          color:
+            autosaveStatus === 'failed-retrying'
+              ? '#ef4444'
+              : autosaveStatus === 'saved-locally-waiting-sync'
+              ? '#eab308'
+              : editorTokens.text.secondary,
+          cursor: 'default',
+          flexShrink: 0,
+        }}
+      >
+        {getAutosaveIcon()}
+        <span>{autosaveMessage}</span>
+        {formattedSavedTime && autosaveStatus === 'saved' && (
+          <span style={{ color: editorTokens.text.muted, fontSize: '0.64rem' }}>
+            {formattedSavedTime}
+          </span>
+        )}
       </div>
     </div>
   );

@@ -60,6 +60,16 @@ export class OperationFactory {
   }
 }
 
+let isApplyingRemoteOperation = false;
+
+export function getIsApplyingRemoteOperation(): boolean {
+  return isApplyingRemoteOperation;
+}
+
+export function setIsApplyingRemoteOperation(applying: boolean): void {
+  isApplyingRemoteOperation = applying;
+}
+
 /**
  * Validates and safely applies a remote operation to local Zustand state.
  * Implements structural conflict safety: no-op if referenced layers don't exist.
@@ -70,6 +80,9 @@ export function applyRemoteOperation(op: EditorOperation): boolean {
     console.warn('Invalid remote operation rejected:', result.error);
     return false;
   }
+
+  const prevApplying = isApplyingRemoteOperation;
+  isApplyingRemoteOperation = true;
 
   const layerStore = useLayerStore.getState();
   const docStore = useDocumentStore.getState();
@@ -134,7 +147,7 @@ export function applyRemoteOperation(op: EditorOperation): boolean {
 
       case 'UPDATE_DOCUMENT': {
         const { patch } = op.payload as { patch: Partial<DocumentMeta> };
-        docStore.updateDocument(patch);
+        docStore.updateDocument(patch, false);
         return true;
       }
 
@@ -145,5 +158,7 @@ export function applyRemoteOperation(op: EditorOperation): boolean {
   } catch (err) {
     console.error('Error applying remote operation:', err);
     return false;
+  } finally {
+    isApplyingRemoteOperation = prevApplying;
   }
 }

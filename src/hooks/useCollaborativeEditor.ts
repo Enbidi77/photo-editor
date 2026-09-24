@@ -6,18 +6,13 @@ import { useCollaborationStore } from '@/store/collaborationStore';
 import { useAuthStore } from '@/store/authStore';
 import { useToolStore } from '@/store/toolStore';
 import { useLayerStore } from '@/store/layerStore';
-import { useDocumentStore } from '@/store/documentStore';
 import { operationBridge } from '@/lib/collaboration/operationBridge';
-import { remoteProjectRepository } from '@/lib/projects/remoteProjectRepository';
-import { PxfSerializer } from '@/editor/export/PxfSerializer';
 import { UserRole } from '@/types/auth';
 
 export function useCollaborativeEditor(projectId: string | null, role: UserRole = 'editor') {
   const { user } = useAuthStore();
   const { activeTool } = useToolStore();
   const { activeLayerId } = useLayerStore();
-  const { document: doc, setDirty } = useDocumentStore();
-  const { setIsSaving } = useCollaborationStore();
 
   const collaboration = useCollaboration(projectId, role);
   const { publishOperation, publishCursor, publishSelection, publishPresence } = collaboration;
@@ -68,26 +63,6 @@ export function useCollaborativeEditor(projectId: string | null, role: UserRole 
     },
     [projectId, activeTool, publishCursor]
   );
-
-  // 6. Debounced auto-save to cloud repository every 4 seconds when document is dirty
-  useEffect(() => {
-    if (!projectId || !doc || !doc.isDirty) return;
-
-    const timer = setTimeout(async () => {
-      try {
-        setIsSaving(true);
-        const project = PxfSerializer.serialize();
-        await remoteProjectRepository.save(project);
-        setDirty(false);
-      } catch (err) {
-        console.warn('Collaborative auto-save failed:', err);
-      } finally {
-        setIsSaving(false);
-      }
-    }, 4000);
-
-    return () => clearTimeout(timer);
-  }, [projectId, doc, doc?.isDirty, setDirty, setIsSaving]);
 
   return {
     ...collaboration,

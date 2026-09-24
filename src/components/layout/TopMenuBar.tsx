@@ -37,7 +37,11 @@ import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
 import { Share2, LayoutDashboard, Undo2, Redo2 } from 'lucide-react';
 
-export const TopMenuBar: React.FC = () => {
+interface TopMenuBarProps {
+  onSave?: () => void;
+}
+
+export const TopMenuBar: React.FC<TopMenuBarProps> = ({ onSave }) => {
   const router = useRouter();
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -428,8 +432,12 @@ export const TopMenuBar: React.FC = () => {
             key="save"
             onClick={() => {
               handleMenuClose();
-              PxfSerializer.exportToFile();
-              showToast('Project saved (.pxf)', 'success');
+              if (onSave) {
+                onSave();
+              } else {
+                PxfSerializer.exportToFile();
+                showToast('Project saved (.pxf)', 'success');
+              }
             }}
           >
             <Typography variant="inherit" sx={{ flex: 1 }}>Save Project (.pxf)</Typography>

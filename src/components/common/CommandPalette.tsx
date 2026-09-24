@@ -35,7 +35,7 @@ export const CommandPalette: React.FC = () => {
 
   const actions: PaletteAction[] = [
     { id: 'new-doc', label: 'New Document...', category: 'File', shortcut: 'Ctrl+N', perform: () => openDialog('new') },
-    { id: 'save-pxf', label: 'Save Project (.pxf)', category: 'File', shortcut: 'Ctrl+S', perform: () => { PxfSerializer.exportToFile(); showToast('Project saved', 'success'); } },
+    { id: 'save-pxf', label: 'Save Project (.pxf)', category: 'File', shortcut: 'Ctrl+S', perform: () => { window.dispatchEvent(new CustomEvent('pixelforge:save')); } },
     { id: 'export-img', label: 'Export Image As...', category: 'File', shortcut: 'Ctrl+Shift+E', perform: () => openDialog('export') },
     { id: 'undo', label: 'Undo Action', category: 'Edit', shortcut: 'Ctrl+Z', perform: () => undo() },
     { id: 'redo', label: 'Redo Action', category: 'Edit', shortcut: 'Ctrl+Shift+Z', perform: () => redo() },

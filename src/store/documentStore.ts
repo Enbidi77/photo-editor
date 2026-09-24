@@ -5,7 +5,7 @@ import { nanoid } from 'nanoid';
 interface DocumentState {
   document: DocumentMeta | null;
   setDocument: (doc: DocumentMeta) => void;
-  updateDocument: (patch: Partial<DocumentMeta>) => void;
+  updateDocument: (patch: Partial<DocumentMeta>, markDirty?: boolean) => void;
   createNewDocument: (
     name?: string,
     width?: number,
@@ -35,7 +35,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
 
   setDocument: (doc) => set({ document: doc }),
 
-  updateDocument: (patch) => {
+  updateDocument: (patch, markDirty = true) => {
     const current = get().document;
     if (!current) return;
     set({
@@ -43,7 +43,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
         ...current,
         ...patch,
         updatedAt: Date.now(),
-        isDirty: true,
+        isDirty: markDirty ? true : current.isDirty,
       },
     });
   },

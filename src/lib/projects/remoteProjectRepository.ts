@@ -165,6 +165,41 @@ export class RemoteProjectRepository {
     }
   }
 
+  async saveRemote(project: PixelForgeProject, options?: { keepalive?: boolean }): Promise<void> {
+    if (!isSupabaseConfigured()) return;
+
+    const docJson = {
+      version: project.version,
+      layers: project.layers,
+    };
+
+    const res = await fetch(`/api/projects/${project.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: project.document.name,
+        width: project.document.width,
+        height: project.document.height,
+        resolution: project.document.resolution,
+        backgroundColor: project.document.backgroundColor,
+        document: docJson,
+        thumbnailUrl: project.thumbnail || null,
+      }),
+      keepalive: options?.keepalive,
+    });
+
+    if (!res.ok) {
+      let errorMsg = `Server responded with status ${res.status}`;
+      try {
+        const errorData = await res.json();
+        if (errorData?.error) errorMsg = errorData.error;
+      } catch {
+        // use status text
+      }
+      throw new Error(errorMsg);
+    }
+  }
+
   async save(project: PixelForgeProject): Promise<void> {
     // Always keep local cache up to date
     await this.localFallback.save(project);
@@ -172,24 +207,7 @@ export class RemoteProjectRepository {
     if (!isSupabaseConfigured()) return;
 
     try {
-      const docJson = {
-        version: project.version,
-        layers: project.layers,
-      };
-
-      await fetch(`/api/projects/${project.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: project.document.name,
-          width: project.document.width,
-          height: project.document.height,
-          resolution: project.document.resolution,
-          backgroundColor: project.document.backgroundColor,
-          document: docJson,
-          thumbnailUrl: project.thumbnail || null,
-        }),
-      });
+      await this.saveRemote(project);
     } catch (err) {
       console.warn('API project save failed:', err);
     }

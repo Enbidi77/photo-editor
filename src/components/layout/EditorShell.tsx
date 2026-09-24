@@ -22,6 +22,7 @@ import { PanelDock } from '../panels/PanelDock';
 import { CanvasViewport } from '@/editor/canvas/CanvasViewport';
 import { ViewOnlyBanner } from '../collaboration/ViewOnlyBanner';
 import { useCollaborativeEditor } from '@/hooks/useCollaborativeEditor';
+import { useAutosave } from '@/hooks/useAutosave';
 import { useCollaborationStore } from '@/store/collaborationStore';
 import { NewDocumentDialog } from '../dialogs/NewDocumentDialog';
 import { ExportDialog } from '../dialogs/ExportDialog';
@@ -37,6 +38,34 @@ export const EditorShell: React.FC = () => {
   const { userRole } = useCollaborationStore();
   const { document: doc } = useDocumentStore();
   const { handlePointerMove } = useCollaborativeEditor(doc?.id || null, userRole);
+  const { forceSave } = useAutosave({ projectId: doc?.id || null, userRole });
+  const {
+    openDialog,
+    setCommandPaletteOpen,
+    showToast,
+    toggleRightSidebar,
+  } = useUIStore();
+
+  const handleManualSave = useCallback(() => {
+    if (userRole === 'viewer') {
+      showToast('Viewers have read-only access and cannot save.', 'warning');
+      return;
+    }
+    forceSave().then((result) => {
+      if (result.success) {
+        PxfSerializer.exportToFile();
+        showToast('Project saved', 'success');
+      } else {
+        showToast(`Save failed: ${result.error || 'Retry scheduled'}`, 'error');
+      }
+    });
+  }, [userRole, forceSave, showToast]);
+
+  useEffect(() => {
+    const onCustomSave = () => handleManualSave();
+    window.addEventListener('pixelforge:save', onCustomSave);
+    return () => window.removeEventListener('pixelforge:save', onCustomSave);
+  }, [handleManualSave]);
 
   const {
     activeTool,
@@ -57,13 +86,6 @@ export const EditorShell: React.FC = () => {
     toggleGrid,
     toggleSnapEnabled,
   } = useViewStore();
-
-  const {
-    openDialog,
-    setCommandPaletteOpen,
-    showToast,
-    toggleRightSidebar,
-  } = useUIStore();
 
   const {
     activeLayerId,
@@ -127,8 +149,7 @@ export const EditorShell: React.FC = () => {
       // Save Project (.pxf)
       if (isCtrlOrCmd && key === 's') {
         e.preventDefault();
-        PxfSerializer.exportToFile();
-        showToast('Project saved (.pxf)', 'success');
+        handleManualSave();
         return;
       }
 
@@ -391,7 +412,7 @@ export const EditorShell: React.FC = () => {
       }}
     >
       {/* 1. Top Menu Bar */}
-      <TopMenuBar />
+      <TopMenuBar onSave={handleManualSave} />
 
       {/* 2. Contextual Options Bar */}
       <OptionsBar />
