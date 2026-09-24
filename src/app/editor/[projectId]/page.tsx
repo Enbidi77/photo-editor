@@ -24,12 +24,29 @@ export default function ProjectEditorPage() {
   const projectId = (params?.projectId as string) || '';
 
   const { data: projectRecord, isLoading, isError } = useProject(projectId);
+  const { data: pendingInvitations = [] } = usePendingInvitations();
+  const acceptMutation = useAcceptInvitation();
+  const [isAccepting, setIsAccepting] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
+
   const { setDocument } = useDocumentStore();
   const { setLayers } = useLayerStore();
   const { clearHistory } = useHistoryStore();
   const { setUserRole } = useCollaborationStore();
 
-  const [isInitialized, setIsInitialized] = useState(false);
+  const matchingInvite = pendingInvitations.find((inv) => inv.projectId === projectId);
+
+  const handleAcceptInvite = async () => {
+    if (!matchingInvite) return;
+    setIsAccepting(true);
+    try {
+      await acceptMutation.mutateAsync(matchingInvite.id);
+      window.location.reload();
+    } catch (err) {
+      console.error('Failed to accept invite:', err);
+      setIsAccepting(false);
+    }
+  };
 
   useEffect(() => {
     if (!projectRecord?.project) return;
@@ -83,24 +100,6 @@ export default function ProjectEditorPage() {
       </div>
     );
   }
-
-  const { data: pendingInvitations = [] } = usePendingInvitations();
-  const acceptMutation = useAcceptInvitation();
-  const [isAccepting, setIsAccepting] = useState(false);
-
-  const matchingInvite = pendingInvitations.find((inv) => inv.projectId === projectId);
-
-  const handleAcceptInvite = async () => {
-    if (!matchingInvite) return;
-    setIsAccepting(true);
-    try {
-      await acceptMutation.mutateAsync(matchingInvite.id);
-      window.location.reload();
-    } catch (err) {
-      console.error('Failed to accept invite:', err);
-      setIsAccepting(false);
-    }
-  };
 
   if (isError || !projectRecord) {
     if (matchingInvite) {
