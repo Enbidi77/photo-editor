@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireProjectAccess } from '@/lib/auth/requireProjectAccess';
 import { memberService } from '@/server/members/member.service';
-import { inviteMemberSchema } from '@/lib/validation/member';
 
 interface RouteParams {
   params: Promise<{ projectId: string }>;
@@ -10,10 +9,10 @@ interface RouteParams {
 export async function GET(_req: NextRequest, { params }: RouteParams) {
   try {
     const { projectId } = await params;
-    await requireProjectAccess(projectId, 'viewer');
+    await requireProjectAccess(projectId, 'editor');
 
-    const members = await memberService.listMembers(projectId);
-    return NextResponse.json({ members });
+    const invites = await memberService.listProjectInvites(projectId);
+    return NextResponse.json({ invites });
   } catch (err: any) {
     if (err?.name === 'UnauthorizedError') {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
@@ -21,21 +20,25 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     if (err?.name === 'ForbiddenError' || err?.name === 'NotFoundError') {
       return NextResponse.json({ error: err.message }, { status: err?.name === 'NotFoundError' ? 404 : 403 });
     }
-    console.error('GET /api/projects/[projectId]/members error:', err);
-    return NextResponse.json({ error: 'Failed to fetch members' }, { status: 500 });
+    console.error('GET /api/projects/[projectId]/invites error:', err);
+    return NextResponse.json({ error: 'Failed to fetch invites' }, { status: 500 });
   }
 }
 
-export async function POST(req: NextRequest, { params }: RouteParams) {
+export async function DELETE(req: NextRequest, { params }: RouteParams) {
   try {
     const { projectId } = await params;
-    const { user } = await requireProjectAccess(projectId, 'editor');
+    await requireProjectAccess(projectId, 'owner');
 
-    const body = await req.json();
-    const validated = inviteMemberSchema.parse(body);
+    const { searchParams } = new URL(req.url);
+    const inviteId = searchParams.get('inviteId');
 
-    const result = await memberService.addOrInviteMember(projectId, validated.email, validated.role, user.id);
-    return NextResponse.json(result);
+    if (!inviteId) {
+      return NextResponse.json({ error: 'inviteId is required' }, { status: 400 });
+    }
+
+    await memberService.cancelProjectInvite(projectId, inviteId);
+    return NextResponse.json({ success: true });
   } catch (err: any) {
     if (err?.name === 'UnauthorizedError') {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
@@ -43,10 +46,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     if (err?.name === 'ForbiddenError' || err?.name === 'NotFoundError') {
       return NextResponse.json({ error: err.message }, { status: err?.name === 'NotFoundError' ? 404 : 403 });
     }
-    if (err?.name === 'ZodError') {
-      return NextResponse.json({ error: 'Validation failed', details: err.errors }, { status: 400 });
-    }
-    console.error('POST /api/projects/[projectId]/members error:', err);
-    return NextResponse.json({ error: 'Failed to invite member' }, { status: 500 });
+    console.error('DELETE /api/projects/[projectId]/invites error:', err);
+    return NextResponse.json({ error: 'Failed to cancel invite' }, { status: 500 });
   }
 }

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { editorTokens } from '@/theme/palette';
 import { remoteProjectRepository } from '@/lib/projects/remoteProjectRepository';
-import { ProjectMember, UserRole } from '@/types/auth';
+import { ProjectMember, UserRole, ProjectInvite } from '@/types/auth';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -12,7 +12,7 @@ import Button from '@mui/material/Button';
 import Avatar from '@mui/material/Avatar';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
-import { Copy, Check, UserPlus, Shield } from 'lucide-react';
+import { Copy, Check, UserPlus, Shield, Clock, Trash2 } from 'lucide-react';
 
 interface ShareDialogProps {
   open: boolean;
@@ -30,6 +30,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
   onClose,
 }) => {
   const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<ProjectInvite[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'editor' | 'viewer'>('editor');
   const [copied, setCopied] = useState(false);
@@ -42,11 +43,15 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
     ? `${window.location.origin}/editor/${projectId}`
     : `/editor/${projectId}`;
 
-  const loadMembers = async () => {
+  const loadMembersAndInvites = async () => {
     if (!projectId) return;
     try {
-      const data = await remoteProjectRepository.getMembers(projectId);
-      setMembers(data);
+      const [membersData, invitesData] = await Promise.all([
+        remoteProjectRepository.getMembers(projectId),
+        remoteProjectRepository.getProjectInvites(projectId),
+      ]);
+      setMembers(membersData);
+      setPendingInvites(invitesData);
     } catch (err) {
       console.error(err);
     }
@@ -54,10 +59,23 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
 
   useEffect(() => {
     if (open) {
-      loadMembers();
+      loadMembersAndInvites();
       setStatusMsg(null);
     }
   }, [open, projectId]);
+
+  const handleCancelInvite = async (inviteId: string) => {
+    try {
+      const res = await remoteProjectRepository.cancelProjectInvite(projectId, inviteId);
+      if (res.error) {
+        setStatusMsg(`Failed to cancel: ${res.error}`);
+      } else {
+        await loadMembersAndInvites();
+      }
+    } catch (err) {
+      console.error('Cancel invite failed:', err);
+    }
+  };
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(shareUrl);
@@ -78,7 +96,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
       } else {
         setStatusMsg(`Invitation sent to ${inviteEmail}!`);
         setInviteEmail('');
-        await loadMembers();
+        await loadMembersAndInvites();
       }
     } catch {
       setStatusMsg('Failed to send invitation');
@@ -264,6 +282,64 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
             )}
           </div>
         </div>
+
+        {/* Pending Invitations Section */}
+        {isOwner && pendingInvites.length > 0 && (
+          <div>
+            <div style={{ fontSize: '0.7rem', color: editorTokens.text.secondary, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Clock size={13} />
+              <span>Pending invitations ({pendingInvites.length})</span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 140, overflowY: 'auto' }}>
+              {pendingInvites.map((invite) => (
+                <div
+                  key={invite.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '6px 10px',
+                    backgroundColor: editorTokens.bg.panel,
+                    border: `1px dashed ${editorTokens.border.medium}`,
+                    borderRadius: 3,
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontSize: '0.75rem', color: editorTokens.text.primary, fontWeight: 500 }}>
+                      {invite.email}
+                    </span>
+                    <span style={{ fontSize: '0.65rem', color: editorTokens.text.muted }}>
+                      Invited as {invite.role} • Pending response
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => handleCancelInvite(invite.id)}
+                      title="Revoke invitation"
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: editorTokens.text.muted,
+                        cursor: 'pointer',
+                        padding: 4,
+                        display: 'flex',
+                        alignItems: 'center',
+                        borderRadius: 3,
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = '#ef4444')}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = editorTokens.text.muted)}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </DialogContent>
 
       <DialogActions sx={{ padding: '10px 18px', borderTop: `1px solid ${editorTokens.border.subtle}` }}>

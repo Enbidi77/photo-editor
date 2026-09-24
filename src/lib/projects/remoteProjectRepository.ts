@@ -1,6 +1,6 @@
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { PixelForgeProject, RecentProjectSummary } from '@/types/project';
-import { ProjectMember, UserRole } from '@/types/auth';
+import { ProjectMember, UserRole, ProjectInvite, PendingProjectInvite } from '@/types/auth';
 import { LocalProjectRepository } from '@/lib/storage/projectRepository';
 
 export interface CreateProjectInput {
@@ -308,6 +308,102 @@ export class RemoteProjectRepository {
         return { error: data.error || 'Failed to invite member' };
       }
 
+      return { error: null };
+    } catch (err: any) {
+      return { error: err.message || 'Network error' };
+    }
+  }
+
+  async getPendingInvitations(): Promise<PendingProjectInvite[]> {
+    if (!isSupabaseConfigured()) {
+      return [];
+    }
+
+    try {
+      const res = await fetch('/api/invitations');
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.invitations || [];
+    } catch (err) {
+      console.warn('API getPendingInvitations failed:', err);
+      return [];
+    }
+  }
+
+  async acceptInvitation(
+    inviteId: string
+  ): Promise<{ success: boolean; projectId?: string; error?: string }> {
+    if (!isSupabaseConfigured()) {
+      return { success: true };
+    }
+
+    try {
+      const res = await fetch(`/api/invitations/${inviteId}/accept`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to accept invitation' };
+      }
+      return { success: true, projectId: data.projectId };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Network error' };
+    }
+  }
+
+  async declineInvitation(
+    inviteId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!isSupabaseConfigured()) {
+      return { success: true };
+    }
+
+    try {
+      const res = await fetch(`/api/invitations/${inviteId}/decline`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to decline invitation' };
+      }
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Network error' };
+    }
+  }
+
+  async getProjectInvites(projectId: string): Promise<ProjectInvite[]> {
+    if (!isSupabaseConfigured()) {
+      return [];
+    }
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/invites`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.invites || [];
+    } catch (err) {
+      console.warn('API getProjectInvites failed:', err);
+      return [];
+    }
+  }
+
+  async cancelProjectInvite(
+    projectId: string,
+    inviteId: string
+  ): Promise<{ error: string | null }> {
+    if (!isSupabaseConfigured()) {
+      return { error: null };
+    }
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/invites?inviteId=${inviteId}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { error: data.error || 'Failed to cancel invitation' };
+      }
       return { error: null };
     } catch (err: any) {
       return { error: err.message || 'Network error' };

@@ -1,6 +1,7 @@
 export * from './profiles';
 export * from './projects';
 export * from './projectMembers';
+export * from './projectInvites';
 export * from './projectAssets';
 export * from './projectOperations';
 export * from './projectSnapshots';

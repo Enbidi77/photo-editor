@@ -46,3 +46,50 @@ export function useDeleteProject() {
     },
   });
 }
+
+export function usePendingInvitations() {
+  return useQuery({
+    queryKey: ['pending-invitations'],
+    queryFn: () => remoteProjectRepository.getPendingInvitations(),
+    refetchInterval: 1000 * 30, // Poll every 30 seconds
+  });
+}
+
+export function useAcceptInvitation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (inviteId: string) => remoteProjectRepository.acceptInvitation(inviteId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pending-invitations'] });
+      queryClient.invalidateQueries({ queryKey: ['projects-list'] });
+    },
+  });
+}
+
+export function useDeclineInvitation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (inviteId: string) => remoteProjectRepository.declineInvitation(inviteId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pending-invitations'] });
+    },
+  });
+}
+
+export function useProjectInvites(projectId: string | null) {
+  return useQuery({
+    queryKey: ['project-invites', projectId],
+    queryFn: () => (projectId ? remoteProjectRepository.getProjectInvites(projectId) : []),
+    enabled: Boolean(projectId),
+  });
+}
+
+export function useCancelProjectInvite(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (inviteId: string) => remoteProjectRepository.cancelProjectInvite(projectId, inviteId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project-invites', projectId] });
+    },
+  });
+}

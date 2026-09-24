@@ -4,6 +4,7 @@ export const profiles = pgTable('profiles', {
   id: uuid('id').primaryKey(),
   displayName: text('display_name'),
   avatarUrl: text('avatar_url'),
+  email: text('email'),
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),

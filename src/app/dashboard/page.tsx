@@ -1,14 +1,20 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useProjectsList, useCreateProject, useDeleteProject } from '@/hooks/useProject';
+import {
+  useProjectsList,
+  useCreateProject,
+  useDeleteProject,
+  usePendingInvitations,
+} from '@/hooks/useProject';
 import { DashboardHeader } from '@/components/dashboard/DashboardHeader';
 import { ProjectCard } from '@/components/dashboard/ProjectCard';
 import { ShareDialog } from '@/components/collaboration/ShareDialog';
+import { PendingInvitationsDialog } from '@/components/collaboration/PendingInvitationsDialog';
 import { editorTokens } from '@/theme/palette';
 import { DOCUMENT_PRESETS, DocumentPreset } from '@/types/document';
-import { Search, Plus, Sparkles, FolderKanban, Trash2 } from 'lucide-react';
+import { Search, Plus, Sparkles, FolderKanban, Trash2, Mail } from 'lucide-react';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -19,17 +25,28 @@ import CircularProgress from '@mui/material/CircularProgress';
 export default function DashboardPage() {
   const router = useRouter();
   const { data: projects = [], isLoading } = useProjectsList();
+  const { data: pendingInvitations = [] } = usePendingInvitations();
   const createProjectMutation = useCreateProject();
   const deleteProjectMutation = useDeleteProject();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
+  const [isInvitationsOpen, setIsInvitationsOpen] = useState(false);
+  const [hasPromptedInvites, setHasPromptedInvites] = useState(false);
   const [shareDialog, setShareDialog] = useState<{ open: boolean; id: string; name: string }>({
     open: false,
     id: '',
     name: '',
   });
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Automatically pop up the invitation dialog when pending invitations are detected on load
+  useEffect(() => {
+    if (!hasPromptedInvites && pendingInvitations.length > 0) {
+      setIsInvitationsOpen(true);
+      setHasPromptedInvites(true);
+    }
+  }, [pendingInvitations.length, hasPromptedInvites]);
 
   // New Project Form State
   const [projName, setProjName] = useState('Untitled Project');
@@ -97,7 +114,11 @@ export default function DashboardPage() {
       }}
     >
       {/* Top Header */}
-      <DashboardHeader onNewProject={() => setIsNewDialogOpen(true)} />
+      <DashboardHeader
+        onNewProject={() => setIsNewDialogOpen(true)}
+        onOpenInvitations={() => setIsInvitationsOpen(true)}
+        pendingCount={pendingInvitations.length}
+      />
 
       {/* Main Content Area */}
       <main
@@ -112,6 +133,57 @@ export default function DashboardPage() {
           gap: 24,
         }}
       >
+        {/* Pending Invitations Alert Banner */}
+        {pendingInvitations.length > 0 && (
+          <div
+            style={{
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              border: `1px solid ${editorTokens.accent.primary}`,
+              borderRadius: 6,
+              padding: '12px 18px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 16,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  backgroundColor: editorTokens.accent.primary,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ffffff',
+                }}
+              >
+                <Mail size={16} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff' }}>
+                  You have {pendingInvitations.length} pending project collaboration invitation{pendingInvitations.length > 1 ? 's' : ''}!
+                </div>
+                <div style={{ fontSize: '0.72rem', color: editorTokens.text.secondary }}>
+                  Accept to immediately start working on shared canvas documents with your team.
+                </div>
+              </div>
+            </div>
+
+            <Button
+              variant="contained"
+              color="primary"
+              size="small"
+              onClick={() => setIsInvitationsOpen(true)}
+              sx={{ fontSize: '0.72rem', height: 28, px: 2 }}
+            >
+              Review Invitations
+            </Button>
+          </div>
+        )}
+
         {/* Subheader / Search & Controls */}
         <div
           style={{
@@ -484,6 +556,12 @@ export default function DashboardPage() {
           onClose={() => setShareDialog({ open: false, id: '', name: '' })}
         />
       )}
+
+      {/* Pending Invitations Dialog */}
+      <PendingInvitationsDialog
+        open={isInvitationsOpen}
+        onClose={() => setIsInvitationsOpen(false)}
+      />
     </div>
   );
 }

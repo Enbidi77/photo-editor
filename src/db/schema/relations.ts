@@ -2,6 +2,7 @@ import { relations } from 'drizzle-orm';
 import { profiles } from './profiles';
 import { projects } from './projects';
 import { projectMembers } from './projectMembers';
+import { projectInvites } from './projectInvites';
 import { projectAssets } from './projectAssets';
 import { projectOperations } from './projectOperations';
 import { projectSnapshots } from './projectSnapshots';
@@ -9,6 +10,7 @@ import { projectSnapshots } from './projectSnapshots';
 export const profilesRelations = relations(profiles, ({ many }) => ({
   ownedProjects: many(projects),
   memberships: many(projectMembers),
+  sentInvites: many(projectInvites),
 }));
 
 export const projectsRelations = relations(projects, ({ one, many }) => ({
@@ -17,6 +19,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
     references: [profiles.id],
   }),
   members: many(projectMembers),
+  invites: many(projectInvites),
   assets: many(projectAssets),
   operations: many(projectOperations),
   snapshots: many(projectSnapshots),
@@ -58,6 +61,17 @@ export const projectSnapshotsRelations = relations(projectSnapshots, ({ one }) =
   }),
   creator: one(profiles, {
     fields: [projectSnapshots.createdBy],
+    references: [profiles.id],
+  }),
+}));
+
+export const projectInvitesRelations = relations(projectInvites, ({ one }) => ({
+  project: one(projects, {
+    fields: [projectInvites.projectId],
+    references: [projects.id],
+  }),
+  inviter: one(profiles, {
+    fields: [projectInvites.invitedBy],
     references: [profiles.id],
   }),
 }));

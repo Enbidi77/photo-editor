@@ -24,5 +24,21 @@ export interface ProjectInvite {
   email: string;
   role: 'editor' | 'viewer';
   token: string;
+  invitedBy?: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface PendingProjectInvite {
+  id: string;
+  projectId: string;
+  projectName: string;
+  role: 'editor' | 'viewer';
+  invitedBy?: {
+    id?: string;
+    displayName: string | null;
+    avatarUrl: string | null;
+  };
+  createdAt: string;
   expiresAt: string;
 }

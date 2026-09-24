@@ -3,16 +3,23 @@
 import React from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { editorTokens } from '@/theme/palette';
-import { Plus, LogOut, User } from 'lucide-react';
+import { Plus, LogOut, User, Mail } from 'lucide-react';
 import Button from '@mui/material/Button';
 import Avatar from '@mui/material/Avatar';
 import Tooltip from '@mui/material/Tooltip';
+import Badge from '@mui/material/Badge';
 
 interface DashboardHeaderProps {
   onNewProject: () => void;
+  onOpenInvitations?: () => void;
+  pendingCount?: number;
 }
 
-export const DashboardHeader: React.FC<DashboardHeaderProps> = ({ onNewProject }) => {
+export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
+  onNewProject,
+  onOpenInvitations,
+  pendingCount = 0,
+}) => {
   const { user, profile, signOut } = useAuth();
 
   const displayName = profile?.displayName || user?.email?.split('@')[0] || 'Creator';
@@ -54,6 +61,35 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({ onNewProject }
 
       {/* User Actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        {onOpenInvitations && (
+          <Tooltip title={pendingCount > 0 ? `${pendingCount} project invitation(s) pending` : 'Project Invitations'}>
+            <button
+              type="button"
+              onClick={onOpenInvitations}
+              style={{
+                position: 'relative',
+                backgroundColor: pendingCount > 0 ? editorTokens.bg.activeRow : 'transparent',
+                border: `1px solid ${pendingCount > 0 ? editorTokens.accent.primary : editorTokens.border.subtle}`,
+                borderRadius: 4,
+                color: pendingCount > 0 ? editorTokens.accent.primary : editorTokens.text.secondary,
+                cursor: 'pointer',
+                height: 30,
+                padding: '0 10px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: '0.75rem',
+                fontWeight: 500,
+              }}
+            >
+              <Badge badgeContent={pendingCount} color="primary" sx={{ '& .MuiBadge-badge': { fontSize: '0.62rem', height: 16, minWidth: 16 } }}>
+                <Mail size={15} />
+              </Badge>
+              <span style={{ display: 'inline-block' }}>Invitations</span>
+            </button>
+          </Tooltip>
+        )}
+
         <Button
           variant="contained"
           color="primary"

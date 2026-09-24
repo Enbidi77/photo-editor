@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
-import { useProject } from '@/hooks/useProject';
+import { useProject, usePendingInvitations, useAcceptInvitation } from '@/hooks/useProject';
 import { useDocumentStore } from '@/store/documentStore';
 import { useLayerStore } from '@/store/layerStore';
 import { useHistoryStore } from '@/store/historyStore';
@@ -11,7 +11,7 @@ import { useCollaborationStore } from '@/store/collaborationStore';
 import { editorTokens } from '@/theme/palette';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
-import { ArrowLeft, AlertCircle } from 'lucide-react';
+import { ArrowLeft, AlertCircle, Check, Mail } from 'lucide-react';
 
 const EditorShell = dynamic(
   () => import('@/components/layout/EditorShell').then((mod) => mod.EditorShell),
@@ -84,7 +84,88 @@ export default function ProjectEditorPage() {
     );
   }
 
+  const { data: pendingInvitations = [] } = usePendingInvitations();
+  const acceptMutation = useAcceptInvitation();
+  const [isAccepting, setIsAccepting] = useState(false);
+
+  const matchingInvite = pendingInvitations.find((inv) => inv.projectId === projectId);
+
+  const handleAcceptInvite = async () => {
+    if (!matchingInvite) return;
+    setIsAccepting(true);
+    try {
+      await acceptMutation.mutateAsync(matchingInvite.id);
+      window.location.reload();
+    } catch (err) {
+      console.error('Failed to accept invite:', err);
+      setIsAccepting(false);
+    }
+  };
+
   if (isError || !projectRecord) {
+    if (matchingInvite) {
+      return (
+        <div
+          style={{
+            width: '100vw',
+            height: '100vh',
+            backgroundColor: editorTokens.bg.app,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 16,
+            color: editorTokens.text.primary,
+            textAlign: 'center',
+            padding: 24,
+          }}
+        >
+          <div
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: '50%',
+              backgroundColor: 'rgba(59, 130, 246, 0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: editorTokens.accent.primary,
+            }}
+          >
+            <Mail size={28} />
+          </div>
+          <h2 style={{ fontSize: '1.25rem', margin: 0 }}>You Have Been Invited!</h2>
+          <p style={{ margin: 0, fontSize: '0.85rem', color: editorTokens.text.secondary, maxWidth: 460 }}>
+            You have a pending invitation from{' '}
+            <strong style={{ color: '#ffffff' }}>{matchingInvite.invitedBy?.displayName || 'the project owner'}</strong> to collaborate
+            on <strong style={{ color: '#ffffff' }}>&ldquo;{matchingInvite.projectName}&rdquo;</strong> as{' '}
+            <strong style={{ color: '#60a5fa', textTransform: 'capitalize' }}>{matchingInvite.role}</strong>.
+          </p>
+          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+            <Button
+              variant="outlined"
+              color="inherit"
+              startIcon={<ArrowLeft size={14} />}
+              onClick={() => router.push('/dashboard')}
+              sx={{ fontSize: '0.75rem', color: editorTokens.text.secondary }}
+            >
+              Dashboard
+            </Button>
+            <Button
+              variant="contained"
+              color="primary"
+              disabled={isAccepting}
+              startIcon={isAccepting ? <CircularProgress size={14} color="inherit" /> : <Check size={14} />}
+              onClick={handleAcceptInvite}
+              sx={{ fontSize: '0.75rem', px: 2.5 }}
+            >
+              Accept Invitation & Join
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div
         style={{
