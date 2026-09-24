@@ -1,0 +1,81 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: pixelforge-app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - WATCHPACK_POLLING=true
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-pixelforge}
+      - AUTO_MIGRATE=${AUTO_MIGRATE:-true}
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+    volumes:
+      # Mount workspace for live Fast Refresh / hot reloading
+      - .:/app
+      # Isolate container Linux node_modules and .next cache from host OS
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pixelforge-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: pixelforge-postgres
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-pixelforge}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-pixelforge}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - pixelforge-network
+
+  drizzle-studio:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: pixelforge-studio
+    command: pnpm db:studio --host 0.0.0.0 --port 4983
+    ports:
+      - "${STUDIO_PORT:-4983}:4983"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-pixelforge}
+      - AUTO_MIGRATE=false
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pixelforge-network
+    profiles:
+      - studio
+
+volumes:
+  postgres_data:
+    name: pixelforge_postgres_data
+
+networks:
+  pixelforge-network:
+    name: pixelforge-network
+    driver: bridge

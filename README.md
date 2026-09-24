@@ -278,7 +278,50 @@ Drizzle Kit is configured via `drizzle.config.ts` to manage PostgreSQL migration
 
 ---
 
-## Installation & Development
+## Docker Local Development
+
+You can run PixelForge along with PostgreSQL and Drizzle Studio in Docker with zero host dependencies (no local Node or Postgres required):
+
+### Quick Start with Docker
+
+1. **Start the application and PostgreSQL:**
+   ```bash
+   docker compose up --build
+   ```
+   - Application is available at [http://localhost:3000](http://localhost:3000).
+   - PostgreSQL is running at `localhost:5432` with automatic schema migrations.
+   - Hot-reloading (Fast Refresh) is active: changes to your local files will update in the browser immediately.
+
+2. **Start with Drizzle Studio UI:**
+   ```bash
+   docker compose --profile studio up
+   ```
+   - Drizzle Studio is available at [http://localhost:4983](http://localhost:4983) for visual database management.
+
+3. **Useful Docker Commands:**
+   ```bash
+   # Run in detached (background) mode
+   docker compose up -d
+
+   # View live logs
+   docker compose logs -f app
+
+   # Run tests inside the Docker container
+   docker compose exec app pnpm test
+
+   # Run database migrations manually
+   docker compose exec app pnpm db:migrate
+
+   # Stop all services and network
+   docker compose down
+
+   # Stop all services and wipe database volume
+   docker compose down -v
+   ```
+
+---
+
+## Installation & Development (Host Machine)
 
 ### Prerequisites
 - Node.js 18+ (tested on Node 22 and Node 24)
@@ -317,4 +360,5 @@ pnpm test
 pnpm build
 pnpm start
 ```
+
 

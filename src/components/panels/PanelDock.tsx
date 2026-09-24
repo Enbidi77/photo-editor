@@ -137,7 +137,7 @@ export const PanelDock: React.FC = () => {
           borderBottom: `1px solid ${editorTokens.border.subtle}`,
           overflowX: 'auto',
           padding: '0 4px',
-          height: 28,
+          height: 48,
         }}
       >
         {TABS.map((tab) => {
