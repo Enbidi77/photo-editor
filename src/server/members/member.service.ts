@@ -5,6 +5,8 @@ import { projectMembers, profiles, projectInvites } from '@/db/schema';
 import { eq, and, or, gt, desc } from 'drizzle-orm';
 import { ProjectRole } from '@/lib/auth/permissions';
 import { PendingProjectInvite, ProjectInvite } from '@/types/auth';
+import { toUuid } from '@/lib/utils/toUuid';
+import { LOCAL_USER_ID } from '@/lib/auth/getCurrentUser';
 
 export interface MemberWithProfile {
   id: string;
@@ -25,8 +27,10 @@ export class MemberService {
       return [];
     }
 
+    const pId = toUuid(projectId);
+
     const members = await db.query.projectMembers.findMany({
-      where: eq(projectMembers.projectId, projectId),
+      where: eq(projectMembers.projectId, pId),
       with: {
         user: true,
       },
@@ -58,6 +62,7 @@ export class MemberService {
       return { success: true };
     }
 
+    const pId = toUuid(projectId);
     const normalizedEmail = email.trim().toLowerCase();
 
     // 1. Check if user already exists in profiles
@@ -73,7 +78,7 @@ export class MemberService {
     if (targetProfile) {
       const existingMember = await db.query.projectMembers.findFirst({
         where: and(
-          eq(projectMembers.projectId, projectId),
+          eq(projectMembers.projectId, pId),
           eq(projectMembers.userId, targetProfile.id)
         ),
       });
@@ -82,7 +87,7 @@ export class MemberService {
         const [updated] = await db
           .update(projectMembers)
           .set({ role })
-          .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, targetProfile.id)))
+          .where(and(eq(projectMembers.projectId, pId), eq(projectMembers.userId, targetProfile.id)))
           .returning();
 
         return {
@@ -108,7 +113,7 @@ export class MemberService {
     if (!inviterId) {
       // Fallback: fetch project owner
       const project = await db.query.projects.findFirst({
-        where: (p, { eq: eqFn }) => eqFn(p.id, projectId),
+        where: (p, { eq: eqFn }) => eqFn(p.id, pId),
       });
       if (!project) {
         return { success: false, error: 'Project not found' };
@@ -120,7 +125,7 @@ export class MemberService {
       .delete(projectInvites)
       .where(
         and(
-          eq(projectInvites.projectId, projectId),
+          eq(projectInvites.projectId, pId),
           eq(projectInvites.email, normalizedEmail)
         )
       );
@@ -128,23 +133,37 @@ export class MemberService {
     const token = randomBytes(24).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-    // Get inviter ID (passed in or project owner)
+    // Get inviter ID (passed in or project owner or local fallback)
     let finalInviterId = inviterId;
     if (!finalInviterId) {
       const proj = await db.query.projects.findFirst({
-        where: (p, { eq: eqFn }) => eqFn(p.id, projectId),
+        where: (p, { eq: eqFn }) => eqFn(p.id, pId),
       });
       finalInviterId = proj?.ownerId;
     }
 
     if (!finalInviterId) {
-      return { success: false, error: 'Could not resolve inviter' };
+      finalInviterId = LOCAL_USER_ID;
+    }
+
+    // Ensure inviter profile exists in DB
+    try {
+      await db
+        .insert(profiles)
+        .values({
+          id: finalInviterId,
+          displayName: 'Local Creator',
+          email: 'creator@pixelforge.local',
+        })
+        .onConflictDoNothing();
+    } catch {
+      // Ignore conflict
     }
 
     const [newInvite] = await db
       .insert(projectInvites)
       .values({
-        projectId,
+        projectId: pId,
         email: normalizedEmail,
         role,
         token,
@@ -171,8 +190,10 @@ export class MemberService {
   async listProjectInvites(projectId: string): Promise<ProjectInvite[]> {
     if (!isDatabaseConfigured()) return [];
 
+    const pId = toUuid(projectId);
+
     const invites = await db.query.projectInvites.findMany({
-      where: eq(projectInvites.projectId, projectId),
+      where: eq(projectInvites.projectId, pId),
       orderBy: [desc(projectInvites.createdAt)],
     });
 
@@ -191,9 +212,11 @@ export class MemberService {
   async cancelProjectInvite(projectId: string, inviteId: string): Promise<void> {
     if (!isDatabaseConfigured()) return;
 
+    const pId = toUuid(projectId);
+
     await db
       .delete(projectInvites)
-      .where(and(eq(projectInvites.projectId, projectId), eq(projectInvites.id, inviteId)));
+      .where(and(eq(projectInvites.projectId, pId), eq(projectInvites.id, inviteId)));
   }
 
   async listUserPendingInvitations(userEmail: string): Promise<PendingProjectInvite[]> {

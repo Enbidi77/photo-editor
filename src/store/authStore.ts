@@ -16,9 +16,11 @@ interface AuthState {
   signOut: () => Promise<void>;
 }
 
+export const LOCAL_USER_ID = '00000000-0000-0000-0000-000000000001';
+
 // Fallback user for offline / standalone mode
 const FALLBACK_USER: User = {
-  id: 'local-user-1',
+  id: LOCAL_USER_ID,
   app_metadata: {},
   user_metadata: { display_name: 'Local Creator' },
   aud: 'authenticated',
@@ -27,7 +29,7 @@ const FALLBACK_USER: User = {
 };
 
 const FALLBACK_PROFILE: UserProfile = {
-  id: 'local-user-1',
+  id: LOCAL_USER_ID,
   displayName: 'Local Creator',
   avatarUrl: '',
   email: 'creator@pixelforge.local',

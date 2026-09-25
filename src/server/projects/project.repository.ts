@@ -2,6 +2,7 @@ import 'server-only';
 import { db, isDatabaseConfigured } from '@/db';
 import { projects, projectMembers, ProjectRow, NewProjectRow } from '@/db/schema';
 import { eq, inArray, desc } from 'drizzle-orm';
+import { toUuid } from '@/lib/utils/toUuid';
 
 export interface ProjectRepository {
   create(input: NewProjectRow): Promise<ProjectRow>;
@@ -26,8 +27,10 @@ export class DrizzleProjectRepository implements ProjectRepository {
       return null;
     }
 
+    const pId = toUuid(projectId);
+
     const project = await db.query.projects.findFirst({
-      where: eq(projects.id, projectId),
+      where: eq(projects.id, pId),
     });
 
     return project || null;
@@ -71,13 +74,15 @@ export class DrizzleProjectRepository implements ProjectRepository {
       throw new Error('Database not configured');
     }
 
+    const pId = toUuid(projectId);
+
     const [updated] = await db
       .update(projects)
       .set({
         ...changes,
         updatedAt: new Date(),
       })
-      .where(eq(projects.id, projectId))
+      .where(eq(projects.id, pId))
       .returning();
 
     return updated;
@@ -88,7 +93,9 @@ export class DrizzleProjectRepository implements ProjectRepository {
       throw new Error('Database not configured');
     }
 
-    await db.delete(projects).where(eq(projects.id, projectId));
+    const pId = toUuid(projectId);
+
+    await db.delete(projects).where(eq(projects.id, pId));
   }
 }
 

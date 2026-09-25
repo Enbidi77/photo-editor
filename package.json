@@ -12,7 +12,9 @@
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:prod": "node scripts/migrate-prod.js",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",

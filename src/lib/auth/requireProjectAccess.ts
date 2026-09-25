@@ -1,5 +1,7 @@
 import 'server-only';
 import { requireUser } from './requireUser';
+import { LOCAL_USER_ID } from './getCurrentUser';
+import { toUuid } from '@/lib/utils/toUuid';
 import { hasMinimumRole, ProjectRole } from './permissions';
 import { db, isDatabaseConfigured } from '@/db';
 import { projects, projectMembers } from '@/db/schema';
@@ -54,10 +56,45 @@ export async function requireProjectAccess(
     };
   }
 
+  const normalizedProjectId = toUuid(projectId);
+
   // 1. Fetch project from Drizzle
-  const project = await db.query.projects.findFirst({
-    where: eq(projects.id, projectId),
+  let project = await db.query.projects.findFirst({
+    where: eq(projects.id, normalizedProjectId),
   });
+
+  if (!project && (projectId.startsWith('local-proj-') || user.id === LOCAL_USER_ID)) {
+    try {
+      const [newProj] = await db
+        .insert(projects)
+        .values({
+          id: normalizedProjectId,
+          ownerId: user.id,
+          name: 'Untitled Project',
+          width: 1920,
+          height: 1080,
+          resolution: 72,
+          backgroundColor: '#ffffff',
+          colorMode: 'RGB',
+          document: { version: 1, layers: [] },
+        })
+        .onConflictDoNothing()
+        .returning();
+
+      await db
+        .insert(projectMembers)
+        .values({
+          projectId: normalizedProjectId,
+          userId: user.id,
+          role: 'owner',
+        })
+        .onConflictDoNothing();
+
+      project = newProj || (await db.query.projects.findFirst({ where: eq(projects.id, normalizedProjectId) }));
+    } catch (e) {
+      console.warn('Auto-create local project in DB failed:', e);
+    }
+  }
 
   if (!project) {
     throw new NotFoundError('Project not found');
@@ -71,7 +108,7 @@ export async function requireProjectAccess(
   // 3. Check if member
   const member = await db.query.projectMembers.findFirst({
     where: and(
-      eq(projectMembers.projectId, projectId),
+      eq(projectMembers.projectId, normalizedProjectId),
       eq(projectMembers.userId, user.id)
     ),
   });

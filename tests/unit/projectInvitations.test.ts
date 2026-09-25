@@ -6,8 +6,20 @@ import { inviteMemberSchema } from '@/lib/validation/member';
 import { projectInvites } from '@/db/schema/projectInvites';
 import { memberService } from '@/server/members/member.service';
 import { canManageMembers, hasMinimumRole } from '@/lib/auth/permissions';
+import { toUuid } from '@/lib/utils/toUuid';
 
 describe('Project Collaboration Invitations & Management', () => {
+  it('deterministically normalizes local project strings into valid UUIDs', () => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const localId = 'local-proj-1790300714245';
+    const normalized = toUuid(localId);
+
+    expect(uuidRegex.test(normalized)).toBe(true);
+    expect(toUuid(localId)).toBe(normalized); // deterministic
+
+    const realUuid = '550e8400-e29b-41d4-a716-446655440000';
+    expect(toUuid(realUuid)).toBe(realUuid); // untouched
+  });
   it('validates invitation inputs correctly', () => {
     // Valid roles and emails
     expect(inviteMemberSchema.safeParse({ email: 'collaborator@pixelforge.io', role: 'editor' }).success).toBe(true);

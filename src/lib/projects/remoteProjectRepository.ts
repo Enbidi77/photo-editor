@@ -2,6 +2,7 @@ import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { PixelForgeProject, RecentProjectSummary } from '@/types/project';
 import { ProjectMember, UserRole, ProjectInvite, PendingProjectInvite } from '@/types/auth';
 import { LocalProjectRepository } from '@/lib/storage/projectRepository';
+import { LOCAL_USER_ID } from '@/store/authStore';
 
 export interface CreateProjectInput {
   name: string;
@@ -22,23 +23,13 @@ export class RemoteProjectRepository {
   private localFallback = new LocalProjectRepository();
 
   async get(id: string): Promise<CloudProjectRecord | null> {
-    if (!isSupabaseConfigured()) {
-      const local = await this.localFallback.get(id);
-      if (!local) return null;
-      return {
-        project: local,
-        role: 'owner',
-        ownerId: 'local-user-1',
-      };
-    }
-
     try {
       const res = await fetch(`/api/projects/${id}`);
       if (!res.ok) {
         // Fallback to local DB if not found or unauthorized
         const local = await this.localFallback.get(id);
         if (local) {
-          return { project: local, role: 'owner', ownerId: 'local-user-1' };
+          return { project: local, role: 'owner', ownerId: LOCAL_USER_ID };
         }
         return null;
       }
@@ -76,37 +67,13 @@ export class RemoteProjectRepository {
       console.warn('API error fetching project, falling back to local:', err);
       const local = await this.localFallback.get(id);
       if (local) {
-        return { project: local, role: 'owner', ownerId: 'local-user-1' };
+        return { project: local, role: 'owner', ownerId: LOCAL_USER_ID };
       }
       return null;
     }
   }
 
   async create(input: CreateProjectInput): Promise<PixelForgeProject> {
-    if (!isSupabaseConfigured()) {
-      const id = `local-proj-${Date.now()}`;
-      const project: PixelForgeProject = {
-        version: 1,
-        id,
-        document: {
-          id,
-          name: input.name,
-          width: input.width,
-          height: input.height,
-          resolution: input.resolution || 72,
-          backgroundColor: input.backgroundColor || '#ffffff',
-          colorMode: input.colorMode || 'RGB',
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
-        layers: [],
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      };
-      await this.localFallback.save(project);
-      return project;
-    }
-
     try {
       const res = await fetch('/api/projects', {
         method: 'POST',
@@ -121,7 +88,7 @@ export class RemoteProjectRepository {
 
       const { project: p } = await res.json();
 
-      return {
+      const created: PixelForgeProject = {
         version: 1,
         id: p.id,
         document: {
@@ -139,9 +106,12 @@ export class RemoteProjectRepository {
         createdAt: new Date(p.createdAt || p.created_at).getTime(),
         updatedAt: new Date(p.updatedAt || p.updated_at).getTime(),
       };
+
+      await this.localFallback.save(created);
+      return created;
     } catch (err: any) {
       console.warn('API project creation failed, creating local project:', err);
-      const id = `local-proj-${Date.now()}`;
+      const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `local-proj-${Date.now()}`;
       const project: PixelForgeProject = {
         version: 1,
         id,
@@ -204,8 +174,6 @@ export class RemoteProjectRepository {
     // Always keep local cache up to date
     await this.localFallback.save(project);
 
-    if (!isSupabaseConfigured()) return;
-
     try {
       await this.saveRemote(project);
     } catch (err) {
@@ -214,39 +182,30 @@ export class RemoteProjectRepository {
   }
 
   async getAll(): Promise<RecentProjectSummary[]> {
-    if (!isSupabaseConfigured()) {
-      return this.localFallback.getRecent();
-    }
-
     try {
       const res = await fetch('/api/projects');
-      if (!res.ok) {
-        return this.localFallback.getRecent();
+      if (res.ok) {
+        const { projects } = await res.json();
+        if (Array.isArray(projects) && projects.length > 0) {
+          return projects.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            width: p.width,
+            height: p.height,
+            updatedAt: new Date(p.updatedAt || p.updated_at).getTime(),
+            thumbnail: p.thumbnailUrl || p.thumbnail_url || undefined,
+            layerCount: Array.isArray(p.document?.layers) ? p.document.layers.length : 0,
+          }));
+        }
       }
-
-      const { projects } = await res.json();
-      if (!Array.isArray(projects)) {
-        return this.localFallback.getRecent();
-      }
-
-      return projects.map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        width: p.width,
-        height: p.height,
-        updatedAt: new Date(p.updatedAt || p.updated_at).getTime(),
-        thumbnail: p.thumbnailUrl || p.thumbnail_url || undefined,
-        layerCount: Array.isArray(p.document?.layers) ? p.document.layers.length : 0,
-      }));
     } catch (err) {
       console.warn('API getAll failed, using local recent:', err);
-      return this.localFallback.getRecent();
     }
+    return this.localFallback.getRecent();
   }
 
   async delete(id: string): Promise<void> {
     await this.localFallback.delete(id);
-    if (!isSupabaseConfigured()) return;
 
     try {
       await fetch(`/api/projects/${id}`, {
@@ -258,8 +217,6 @@ export class RemoteProjectRepository {
   }
 
   async getMembers(projectId: string): Promise<ProjectMember[]> {
-    if (!isSupabaseConfigured()) return [];
-
     try {
       const res = await fetch(`/api/projects/${projectId}/members`);
       if (!res.ok) return [];
@@ -292,10 +249,6 @@ export class RemoteProjectRepository {
     email: string,
     role: 'editor' | 'viewer'
   ): Promise<{ error: string | null }> {
-    if (!isSupabaseConfigured()) {
-      return { error: null };
-    }
-
     try {
       const res = await fetch(`/api/projects/${projectId}/members`, {
         method: 'POST',
@@ -315,10 +268,6 @@ export class RemoteProjectRepository {
   }
 
   async getPendingInvitations(): Promise<PendingProjectInvite[]> {
-    if (!isSupabaseConfigured()) {
-      return [];
-    }
-
     try {
       const res = await fetch('/api/invitations');
       if (!res.ok) return [];
@@ -333,10 +282,6 @@ export class RemoteProjectRepository {
   async acceptInvitation(
     inviteId: string
   ): Promise<{ success: boolean; projectId?: string; error?: string }> {
-    if (!isSupabaseConfigured()) {
-      return { success: true };
-    }
-
     try {
       const res = await fetch(`/api/invitations/${inviteId}/accept`, {
         method: 'POST',
@@ -354,10 +299,6 @@ export class RemoteProjectRepository {
   async declineInvitation(
     inviteId: string
   ): Promise<{ success: boolean; error?: string }> {
-    if (!isSupabaseConfigured()) {
-      return { success: true };
-    }
-
     try {
       const res = await fetch(`/api/invitations/${inviteId}/decline`, {
         method: 'POST',
@@ -373,10 +314,6 @@ export class RemoteProjectRepository {
   }
 
   async getProjectInvites(projectId: string): Promise<ProjectInvite[]> {
-    if (!isSupabaseConfigured()) {
-      return [];
-    }
-
     try {
       const res = await fetch(`/api/projects/${projectId}/invites`);
       if (!res.ok) return [];
@@ -392,10 +329,6 @@ export class RemoteProjectRepository {
     projectId: string,
     inviteId: string
   ): Promise<{ error: string | null }> {
-    if (!isSupabaseConfigured()) {
-      return { error: null };
-    }
-
     try {
       const res = await fetch(`/api/projects/${projectId}/invites?inviteId=${inviteId}`, {
         method: 'DELETE',
