@@ -8,6 +8,7 @@ export interface CollaborationUser {
   avatarUrl?: string;
   role: UserRole;
   color: string;
+  clientId?: string;
 }
 
 export interface CollaborationAdapter {

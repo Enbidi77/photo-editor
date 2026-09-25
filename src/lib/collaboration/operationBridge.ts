@@ -6,16 +6,19 @@ class OperationBridge {
   private subscribers = new Set<OperationSubscriber>();
   private currentProjectId: string | null = null;
   private currentUserId: string | null = null;
+  private currentClientId: string | null = null;
 
-  setContext(projectId: string | null, userId: string | null) {
+  setContext(projectId: string | null, userId: string | null, clientId?: string | null) {
     this.currentProjectId = projectId;
     this.currentUserId = userId;
+    this.currentClientId = clientId || null;
   }
 
   getContext() {
     return {
       projectId: this.currentProjectId,
       userId: this.currentUserId,
+      clientId: this.currentClientId,
     };
   }
 
@@ -27,6 +30,9 @@ class OperationBridge {
   }
 
   broadcast(op: EditorOperation): void {
+    if (!op.clientId && this.currentClientId) {
+      op.clientId = this.currentClientId;
+    }
     this.subscribers.forEach((sub) => {
       try {
         sub(op);

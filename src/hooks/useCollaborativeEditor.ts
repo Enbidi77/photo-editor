@@ -15,17 +15,17 @@ export function useCollaborativeEditor(projectId: string | null, role: UserRole 
   const { activeLayerId } = useLayerStore();
 
   const collaboration = useCollaboration(projectId, role);
-  const { publishOperation, publishCursor, publishSelection, publishPresence } = collaboration;
+  const { publishOperation, publishCursor, publishSelection, publishPresence, clientId } = collaboration;
 
   // 1. Maintain context in operationBridge
   useEffect(() => {
     const currentUserId = user?.id || `anon-${Math.random()}`;
-    operationBridge.setContext(projectId, currentUserId);
+    operationBridge.setContext(projectId, currentUserId, clientId);
 
     return () => {
-      operationBridge.setContext(null, null);
+      operationBridge.setContext(null, null, null);
     };
-  }, [projectId, user?.id]);
+  }, [projectId, user?.id, clientId]);
 
   // 2. Subscribe operationBridge to publishOperation
   useEffect(() => {

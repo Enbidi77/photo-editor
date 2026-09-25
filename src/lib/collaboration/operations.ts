@@ -10,53 +10,56 @@ export class OperationFactory {
     type: OperationType,
     projectId: string,
     userId: string,
-    payload: T
+    payload: T,
+    clientId?: string
   ): EditorOperation<T> {
     return {
       id: nanoid(),
       projectId,
       userId,
+      clientId,
       type,
       timestamp: Date.now(),
       payload,
     };
   }
 
-  static addLayer(projectId: string, userId: string, layer: Layer, index = 0) {
-    return this.create('ADD_LAYER', projectId, userId, { layer, index });
+  static addLayer(projectId: string, userId: string, layer: Layer, index = 0, clientId?: string) {
+    return this.create('ADD_LAYER', projectId, userId, { layer, index }, clientId);
   }
 
-  static deleteLayer(projectId: string, userId: string, layerId: string) {
-    return this.create('DELETE_LAYER', projectId, userId, { layerId });
+  static deleteLayer(projectId: string, userId: string, layerId: string, clientId?: string) {
+    return this.create('DELETE_LAYER', projectId, userId, { layerId }, clientId);
   }
 
   static transformLayer(
     projectId: string,
     userId: string,
     layerId: string,
-    transform: { x: number; y: number; width: number; height: number; rotation: number }
+    transform: { x: number; y: number; width: number; height: number; rotation: number },
+    clientId?: string
   ) {
-    return this.create('TRANSFORM_LAYER', projectId, userId, { layerId, transform });
+    return this.create('TRANSFORM_LAYER', projectId, userId, { layerId, transform }, clientId);
   }
 
-  static updateLayer(projectId: string, userId: string, layerId: string, patch: Partial<Layer>) {
-    return this.create('UPDATE_LAYER', projectId, userId, { layerId, patch });
+  static updateLayer(projectId: string, userId: string, layerId: string, patch: Partial<Layer>, clientId?: string) {
+    return this.create('UPDATE_LAYER', projectId, userId, { layerId, patch }, clientId);
   }
 
-  static reorderLayer(projectId: string, userId: string, startIndex: number, endIndex: number) {
-    return this.create('REORDER_LAYER', projectId, userId, { startIndex, endIndex });
+  static reorderLayer(projectId: string, userId: string, startIndex: number, endIndex: number, clientId?: string) {
+    return this.create('REORDER_LAYER', projectId, userId, { startIndex, endIndex }, clientId);
   }
 
-  static updateOpacity(projectId: string, userId: string, layerId: string, opacity: number) {
-    return this.create('UPDATE_OPACITY', projectId, userId, { layerId, opacity });
+  static updateOpacity(projectId: string, userId: string, layerId: string, opacity: number, clientId?: string) {
+    return this.create('UPDATE_OPACITY', projectId, userId, { layerId, opacity }, clientId);
   }
 
-  static updateBlendMode(projectId: string, userId: string, layerId: string, blendMode: BlendMode) {
-    return this.create('UPDATE_BLEND_MODE', projectId, userId, { layerId, blendMode });
+  static updateBlendMode(projectId: string, userId: string, layerId: string, blendMode: BlendMode, clientId?: string) {
+    return this.create('UPDATE_BLEND_MODE', projectId, userId, { layerId, blendMode }, clientId);
   }
 
-  static updateDocument(projectId: string, userId: string, patch: Partial<DocumentMeta>) {
-    return this.create('UPDATE_DOCUMENT', projectId, userId, { patch });
+  static updateDocument(projectId: string, userId: string, patch: Partial<DocumentMeta>, clientId?: string) {
+    return this.create('UPDATE_DOCUMENT', projectId, userId, { patch }, clientId);
   }
 }
 

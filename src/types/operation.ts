@@ -20,6 +20,7 @@ export interface EditorOperation<T = unknown> {
   id: string;
   projectId: string;
   userId: string;
+  clientId?: string;
   type: OperationType;
   timestamp: number;
   sequence?: number;
@@ -30,6 +31,7 @@ export const EditorOperationSchema = z.object({
   id: z.string(),
   projectId: z.string(),
   userId: z.string(),
+  clientId: z.string().optional(),
   type: z.enum([
     'ADD_LAYER',
     'DELETE_LAYER',

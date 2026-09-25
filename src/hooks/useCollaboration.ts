@@ -12,8 +12,12 @@ import { EditorOperation } from '@/types/operation';
 import { applyRemoteOperation } from '@/lib/collaboration/operations';
 import { UserRole } from '@/types/auth';
 
+import { nanoid } from 'nanoid';
+
 export function useCollaboration(projectId: string | null, role: UserRole = 'editor') {
   const adapterRef = useRef<CollaborationAdapter | null>(null);
+  const clientIdRef = useRef<string>(nanoid());
+  const clientId = clientIdRef.current;
 
   const {
     connected,
@@ -47,12 +51,14 @@ export function useCollaboration(projectId: string | null, role: UserRole = 'edi
       avatarUrl,
       role,
       color,
+      clientId,
     });
 
     // Subscribe to operations
     const unsubOps = adapter.subscribeOperations((op: EditorOperation) => {
-      // Don't re-apply our own operations
-      if (op.userId === currentUserId) return;
+      // Don't re-apply our own operations from this specific client instance
+      if (op.clientId && op.clientId === clientId) return;
+      if (!op.clientId && op.userId === currentUserId) return;
       applyRemoteOperation(op);
     });
 
@@ -61,7 +67,7 @@ export function useCollaboration(projectId: string | null, role: UserRole = 'edi
       adapter.disconnect();
       adapterRef.current = null;
     };
-  }, [projectId, user?.id, role, setUserRole, profile?.displayName, profile?.avatarUrl]);
+  }, [projectId, user?.id, role, setUserRole, profile?.displayName, profile?.avatarUrl, clientId]);
 
   const publishOperation = useCallback(async (op: EditorOperation) => {
     if (adapterRef.current) {
@@ -99,5 +105,6 @@ export function useCollaboration(projectId: string | null, role: UserRole = 'edi
     publishCursor,
     publishSelection,
     publishPresence,
+    clientId,
   };
 }
