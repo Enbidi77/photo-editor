@@ -18,23 +18,6 @@ interface AuthState {
 
 export const LOCAL_USER_ID = '00000000-0000-0000-0000-000000000001';
 
-// Fallback user for offline / standalone mode
-const FALLBACK_USER: User = {
-  id: LOCAL_USER_ID,
-  app_metadata: {},
-  user_metadata: { display_name: 'Local Creator' },
-  aud: 'authenticated',
-  created_at: new Date().toISOString(),
-  email: 'creator@pixelforge.local',
-};
-
-const FALLBACK_PROFILE: UserProfile = {
-  id: LOCAL_USER_ID,
-  displayName: 'Local Creator',
-  avatarUrl: '',
-  email: 'creator@pixelforge.local',
-};
-
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   session: null,
@@ -51,9 +34,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   initAuth: async () => {
     if (!isSupabaseConfigured()) {
       set({
-        user: FALLBACK_USER,
+        user: null,
         session: null,
-        profile: FALLBACK_PROFILE,
+        profile: null,
         initialized: true,
         loading: false,
       });
@@ -70,7 +53,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           .from('profiles')
           .select('*')
           .eq('id', session.user.id)
-          .single();
+          .maybeSingle();
 
         set({
           user: session.user,
@@ -95,7 +78,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             .from('profiles')
             .select('*')
             .eq('id', newSession.user.id)
-            .single();
+            .maybeSingle();
 
           set({
             user: newSession.user,

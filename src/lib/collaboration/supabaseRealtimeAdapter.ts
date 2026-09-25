@@ -37,6 +37,18 @@ export class SupabaseRealtimeCollaborationAdapter implements CollaborationAdapte
     const supabase = getSupabaseBrowserClient();
     const channelName = `project:${projectId}`;
 
+    // Clean up any existing channel with the same name before recreating
+    if (this.channel) {
+      await this.disconnect();
+    }
+
+    const existingChannels = supabase.getChannels().filter(
+      (c) => c.topic === `realtime:${channelName}` || c.topic === channelName
+    );
+    for (const ch of existingChannels) {
+      await supabase.removeChannel(ch);
+    }
+
     const channel = supabase.channel(channelName, {
       config: {
         broadcast: { self: false },
@@ -93,35 +105,55 @@ export class SupabaseRealtimeCollaborationAdapter implements CollaborationAdapte
       store.removeRemoteSelection(key);
     });
 
+    this.channel = channel;
+
     // Subscribe to channel
     channel.subscribe(async (status) => {
+      // Guard against stale callbacks if disconnected while subscribing
+      if (this.channel !== channel) return;
+
       if (status === 'SUBSCRIBED') {
         store.setConnectionState('connected');
         // Track own presence
-        await channel.track({
-          displayName: user.name,
-          avatarUrl: user.avatarUrl,
-          role: user.role,
-          color: user.color,
-        });
+        try {
+          await channel.track({
+            displayName: user.name,
+            avatarUrl: user.avatarUrl,
+            role: user.role,
+            color: user.color,
+          });
+        } catch (err) {
+          console.warn('Failed to track presence:', err);
+        }
         // Flush any pending offline operations
         this.flushOfflineQueue();
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        store.setConnectionState('error');
+        if (this.channel === channel) {
+          store.setConnectionState('error');
+        }
       } else if (status === 'CLOSED') {
-        store.setConnectionState('disconnected');
+        if (this.channel === channel) {
+          store.setConnectionState('disconnected');
+        }
       }
     });
-
-    this.channel = channel;
   }
 
   async disconnect(): Promise<void> {
     if (this.channel) {
-      const supabase = getSupabaseBrowserClient();
-      await this.channel.untrack();
-      await supabase.removeChannel(this.channel);
+      const ch = this.channel;
       this.channel = null;
+      const supabase = getSupabaseBrowserClient();
+      try {
+        await ch.untrack();
+      } catch {
+        // Ignore untrack error if channel not joined
+      }
+      try {
+        await supabase.removeChannel(ch);
+      } catch {
+        // Ignore removeChannel error
+      }
     }
     this.projectId = null;
     this.user = null;

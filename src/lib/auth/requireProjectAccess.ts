@@ -1,6 +1,5 @@
 import 'server-only';
 import { requireUser } from './requireUser';
-import { LOCAL_USER_ID } from './getCurrentUser';
 import { toUuid } from '@/lib/utils/toUuid';
 import { hasMinimumRole, ProjectRole } from './permissions';
 import { db, isDatabaseConfigured } from '@/db';
@@ -35,25 +34,7 @@ export async function requireProjectAccess(
   const user = await requireUser();
 
   if (!isDatabaseConfigured()) {
-    // If DB is not configured, grant owner access to the authenticated user for local fallback
-    return {
-      user,
-      role: 'owner',
-      project: {
-        id: projectId,
-        ownerId: user.id,
-        name: 'Local Project',
-        width: 1920,
-        height: 1080,
-        resolution: 72,
-        backgroundColor: '#ffffff',
-        colorMode: 'RGB',
-        document: {},
-        thumbnailUrl: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-    };
+    throw new Error('Database not configured');
   }
 
   const normalizedProjectId = toUuid(projectId);

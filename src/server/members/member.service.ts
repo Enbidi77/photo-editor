@@ -6,8 +6,6 @@ import { eq, and, or, gt, desc } from 'drizzle-orm';
 import { ProjectRole } from '@/lib/auth/permissions';
 import { PendingProjectInvite, ProjectInvite } from '@/types/auth';
 import { toUuid } from '@/lib/utils/toUuid';
-import { LOCAL_USER_ID } from '@/lib/auth/getCurrentUser';
-import { isSupabaseConfigured } from '@/lib/supabase/client';
 
 export interface MemberWithProfile {
   id: string;
@@ -119,11 +117,7 @@ export class MemberService {
     }
 
     if (!finalInviterId) {
-      if (!isSupabaseConfigured()) {
-        finalInviterId = LOCAL_USER_ID;
-      } else {
-        return { success: false, error: 'Could not resolve project inviter' };
-      }
+      return { success: false, error: 'Could not resolve project inviter' };
     }
 
     // Ensure inviter profile exists in DB
@@ -136,8 +130,8 @@ export class MemberService {
           .insert(profiles)
           .values({
             id: finalInviterId,
-            displayName: finalInviterId === LOCAL_USER_ID ? 'Local Creator' : 'Collaborator',
-            email: finalInviterId === LOCAL_USER_ID ? 'creator@pixelforge.local' : null,
+            displayName: 'Collaborator',
+            email: null,
           })
           .onConflictDoNothing();
       }

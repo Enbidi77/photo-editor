@@ -54,33 +54,7 @@ export async function getCurrentUser(): Promise<User | null> {
       console.error('Failed to get current user from session:', err);
       return null;
     }
-  }
-
-  // When Supabase is not configured (standalone / offline local development mode),
-  // but PostgreSQL is configured:
-  // Use the local creator profile so local projects, memberships, and invitations persist cleanly.
-  if (!isSupabaseConfigured() && isDatabaseConfigured()) {
-    try {
-      await db
-        .insert(profiles)
-        .values({
-          id: LOCAL_USER_ID,
-          displayName: 'Local Creator',
-          email: 'creator@pixelforge.local',
-        })
-        .onConflictDoNothing();
-    } catch (err) {
-      console.warn('Failed to ensure default profile in DB:', err);
-    }
-
-    return {
-      id: LOCAL_USER_ID,
-      app_metadata: {},
-      user_metadata: { display_name: 'Local Creator' },
-      aud: 'authenticated',
-      created_at: new Date().toISOString(),
-      email: 'creator@pixelforge.local',
-    };
+    return null;
   }
 
   return null;

@@ -35,6 +35,7 @@ export function useCollaboration(projectId: string | null, role: UserRole = 'edi
   useEffect(() => {
     if (!projectId) return;
 
+    let isCancelled = false;
     setUserRole(role);
     const adapter = createCollaborationAdapter();
     adapterRef.current = adapter;
@@ -45,17 +46,24 @@ export function useCollaboration(projectId: string | null, role: UserRole = 'edi
     const color = getRandomColor(currentUserId);
 
     // Connect
-    adapter.connect(projectId, {
-      id: currentUserId,
-      name: displayName,
-      avatarUrl,
-      role,
-      color,
-      clientId,
-    });
+    adapter
+      .connect(projectId, {
+        id: currentUserId,
+        name: displayName,
+        avatarUrl,
+        role,
+        color,
+        clientId,
+      })
+      .catch((err) => {
+        if (!isCancelled) {
+          console.warn('Failed to connect collaboration adapter:', err);
+        }
+      });
 
     // Subscribe to operations
     const unsubOps = adapter.subscribeOperations((op: EditorOperation) => {
+      if (isCancelled) return;
       // Don't re-apply our own operations from this specific client instance
       if (op.clientId && op.clientId === clientId) return;
       if (!op.clientId && op.userId === currentUserId) return;
@@ -63,8 +71,9 @@ export function useCollaboration(projectId: string | null, role: UserRole = 'edi
     });
 
     return () => {
+      isCancelled = true;
       unsubOps();
-      adapter.disconnect();
+      adapter.disconnect().catch(() => {});
       adapterRef.current = null;
     };
   }, [projectId, user?.id, role, setUserRole, profile?.displayName, profile?.avatarUrl, clientId]);
