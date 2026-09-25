@@ -28,7 +28,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
   try {
     const { projectId } = await params;
-    await requireProjectAccess(projectId, 'owner');
+    await requireProjectAccess(projectId, 'editor');
 
     const { searchParams } = new URL(req.url);
     const inviteId = searchParams.get('inviteId');

@@ -37,6 +37,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
   const [isSending, setIsSending] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
+  const canManage = userRole === 'owner' || userRole === 'editor';
   const isOwner = userRole === 'owner';
 
   const shareUrl = typeof window !== 'undefined'
@@ -174,7 +175,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({
         </div>
 
         {/* Invite by Email */}
-        {isOwner && (
+        {canManage && (
           <form onSubmit={handleInvite}>
             <div style={{ fontSize: '0.7rem', color: editorTokens.text.secondary, marginBottom: 6 }}>
               Invite Collaborators

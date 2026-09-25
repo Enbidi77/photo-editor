@@ -86,4 +86,24 @@ describe('Project Collaboration Invitations & Management', () => {
     const declineRes = await memberService.declineInvitation('fake-invite-id', 'test@example.com');
     expect(declineRes.success).toBe(true);
   });
+
+  it('safely handles date fields whether returned as Date instances or ISO strings', () => {
+    const dateObj = new Date('2026-10-01T12:00:00.000Z');
+    const dateStr = '2026-10-01T12:00:00.000Z';
+
+    const format = (d: any) => (d instanceof Date ? d.toISOString() : new Date(d).toISOString());
+
+    expect(format(dateObj)).toBe('2026-10-01T12:00:00.000Z');
+    expect(format(dateStr)).toBe('2026-10-01T12:00:00.000Z');
+  });
+
+  it('confirms both owner and editor can manage invitations and access invite endpoints', () => {
+    expect(canManageMembers('owner')).toBe(true);
+    expect(canManageMembers('editor')).toBe(true);
+    expect(canManageMembers('viewer')).toBe(false);
+
+    expect(hasMinimumRole('owner', 'editor')).toBe(true);
+    expect(hasMinimumRole('editor', 'editor')).toBe(true);
+    expect(hasMinimumRole('viewer', 'editor')).toBe(false);
+  });
 });

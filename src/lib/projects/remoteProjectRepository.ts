@@ -257,7 +257,7 @@ export class RemoteProjectRepository {
       });
 
       const data = await res.json();
-      if (!res.ok) {
+      if (!res.ok || data.error || data.success === false) {
         return { error: data.error || 'Failed to invite member' };
       }
 

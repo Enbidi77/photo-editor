@@ -36,11 +36,20 @@ function createDatabaseConnection(): { pool: Pool | null; db: NodePgDatabase<typ
 
   // Reuse existing pool in development to avoid exhausting connections on hot reloads
   if (!globalThis.__dbPool__) {
+    const isRemote =
+      databaseUrl.includes('supabase') ||
+      databaseUrl.includes('pooler') ||
+      databaseUrl.includes('aws') ||
+      databaseUrl.includes('sslmode=') ||
+      !databaseUrl.includes('localhost');
+    const ssl = isRemote ? { rejectUnauthorized: false } : undefined;
+
     globalThis.__dbPool__ = new Pool({
       connectionString: databaseUrl,
       max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
+      ...(ssl ? { ssl } : {}),
     });
   }
 

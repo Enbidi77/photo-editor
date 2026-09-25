@@ -35,6 +35,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     const validated = inviteMemberSchema.parse(body);
 
     const result = await memberService.addOrInviteMember(projectId, validated.email, validated.role, user.id);
+    if (!result.success) {
+      return NextResponse.json({ error: result.error || 'Failed to invite member' }, { status: 400 });
+    }
     return NextResponse.json(result);
   } catch (err: any) {
     if (err?.name === 'UnauthorizedError') {

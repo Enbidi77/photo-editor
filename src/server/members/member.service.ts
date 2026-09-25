@@ -7,6 +7,7 @@ import { ProjectRole } from '@/lib/auth/permissions';
 import { PendingProjectInvite, ProjectInvite } from '@/types/auth';
 import { toUuid } from '@/lib/utils/toUuid';
 import { LOCAL_USER_ID } from '@/lib/auth/getCurrentUser';
+import { isSupabaseConfigured } from '@/lib/supabase/client';
 
 export interface MemberWithProfile {
   id: string;
@@ -109,15 +110,39 @@ export class MemberService {
     }
 
     // 3. Create or replace a pending invitation so the invited user receives a dialog prompt
-    const inviterId = invitedByUserId || targetProfile?.id;
-    if (!inviterId) {
-      // Fallback: fetch project owner
+    let finalInviterId = invitedByUserId;
+    if (!finalInviterId) {
       const project = await db.query.projects.findFirst({
         where: (p, { eq: eqFn }) => eqFn(p.id, pId),
       });
-      if (!project) {
-        return { success: false, error: 'Project not found' };
+      finalInviterId = project?.ownerId;
+    }
+
+    if (!finalInviterId) {
+      if (!isSupabaseConfigured()) {
+        finalInviterId = LOCAL_USER_ID;
+      } else {
+        return { success: false, error: 'Could not resolve project inviter' };
       }
+    }
+
+    // Ensure inviter profile exists in DB
+    try {
+      const existingInviterProfile = await db.query.profiles.findFirst({
+        where: (p, { eq: eqFn }) => eqFn(p.id, finalInviterId!),
+      });
+      if (!existingInviterProfile) {
+        await db
+          .insert(profiles)
+          .values({
+            id: finalInviterId,
+            displayName: finalInviterId === LOCAL_USER_ID ? 'Local Creator' : 'Collaborator',
+            email: finalInviterId === LOCAL_USER_ID ? 'creator@pixelforge.local' : null,
+          })
+          .onConflictDoNothing();
+      }
+    } catch (err) {
+      console.warn('Profile ensure failed in addOrInviteMember:', err);
     }
 
     // Remove any existing pending invite for this project & email
@@ -133,33 +158,6 @@ export class MemberService {
     const token = randomBytes(24).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-    // Get inviter ID (passed in or project owner or local fallback)
-    let finalInviterId = inviterId;
-    if (!finalInviterId) {
-      const proj = await db.query.projects.findFirst({
-        where: (p, { eq: eqFn }) => eqFn(p.id, pId),
-      });
-      finalInviterId = proj?.ownerId;
-    }
-
-    if (!finalInviterId) {
-      finalInviterId = LOCAL_USER_ID;
-    }
-
-    // Ensure inviter profile exists in DB
-    try {
-      await db
-        .insert(profiles)
-        .values({
-          id: finalInviterId,
-          displayName: 'Local Creator',
-          email: 'creator@pixelforge.local',
-        })
-        .onConflictDoNothing();
-    } catch {
-      // Ignore conflict
-    }
-
     const [newInvite] = await db
       .insert(projectInvites)
       .values({
@@ -172,6 +170,19 @@ export class MemberService {
       })
       .returning();
 
+    if (!newInvite) {
+      return { success: false, error: 'Failed to create invitation record' };
+    }
+
+    const createdAtIso =
+      newInvite.createdAt instanceof Date
+        ? newInvite.createdAt.toISOString()
+        : new Date(newInvite.createdAt).toISOString();
+    const expiresAtIso =
+      newInvite.expiresAt instanceof Date
+        ? newInvite.expiresAt.toISOString()
+        : new Date(newInvite.expiresAt).toISOString();
+
     return {
       success: true,
       invite: {
@@ -181,8 +192,8 @@ export class MemberService {
         role: newInvite.role as 'editor' | 'viewer',
         token: newInvite.token,
         invitedBy: newInvite.invitedBy,
-        createdAt: newInvite.createdAt.toISOString(),
-        expiresAt: newInvite.expiresAt.toISOString(),
+        createdAt: createdAtIso,
+        expiresAt: expiresAtIso,
       },
     };
   }
@@ -204,8 +215,8 @@ export class MemberService {
       role: i.role as 'editor' | 'viewer',
       token: i.token,
       invitedBy: i.invitedBy,
-      createdAt: i.createdAt.toISOString(),
-      expiresAt: i.expiresAt.toISOString(),
+      createdAt: i.createdAt instanceof Date ? i.createdAt.toISOString() : new Date(i.createdAt).toISOString(),
+      expiresAt: i.expiresAt instanceof Date ? i.expiresAt.toISOString() : new Date(i.expiresAt).toISOString(),
     }));
   }
 
@@ -248,8 +259,8 @@ export class MemberService {
             avatarUrl: i.inviter.avatarUrl,
           }
         : undefined,
-      createdAt: i.createdAt.toISOString(),
-      expiresAt: i.expiresAt.toISOString(),
+      createdAt: i.createdAt instanceof Date ? i.createdAt.toISOString() : new Date(i.createdAt).toISOString(),
+      expiresAt: i.expiresAt instanceof Date ? i.expiresAt.toISOString() : new Date(i.expiresAt).toISOString(),
     }));
   }
 

@@ -4,7 +4,7 @@ import { LOCAL_USER_ID } from './getCurrentUser';
 import { toUuid } from '@/lib/utils/toUuid';
 import { hasMinimumRole, ProjectRole } from './permissions';
 import { db, isDatabaseConfigured } from '@/db';
-import { projects, projectMembers } from '@/db/schema';
+import { projects, projectMembers, profiles } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { User } from '@supabase/supabase-js';
 
@@ -63,8 +63,25 @@ export async function requireProjectAccess(
     where: eq(projects.id, normalizedProjectId),
   });
 
-  if (!project && (projectId.startsWith('local-proj-') || user.id === LOCAL_USER_ID)) {
+  if (!project) {
     try {
+      const displayName =
+        user.user_metadata?.display_name ||
+        user.user_metadata?.full_name ||
+        (user.email ? user.email.split('@')[0] : 'Creator');
+      const normalizedEmail = user.email ? user.email.trim().toLowerCase() : null;
+
+      // Ensure user profile exists before foreign key insert
+      await db
+        .insert(profiles)
+        .values({
+          id: user.id,
+          displayName,
+          email: normalizedEmail,
+          avatarUrl: user.user_metadata?.avatar_url || null,
+        })
+        .onConflictDoNothing();
+
       const [newProj] = await db
         .insert(projects)
         .values({
@@ -92,7 +109,7 @@ export async function requireProjectAccess(
 
       project = newProj || (await db.query.projects.findFirst({ where: eq(projects.id, normalizedProjectId) }));
     } catch (e) {
-      console.warn('Auto-create local project in DB failed:', e);
+      console.warn('Auto-create project in DB failed:', e);
     }
   }
 

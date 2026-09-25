@@ -553,6 +553,7 @@ export default function DashboardPage() {
           open={shareDialog.open}
           projectId={shareDialog.id}
           projectName={shareDialog.name}
+          userRole="owner"
           onClose={() => setShareDialog({ open: false, id: '', name: '' })}
         />
       )}
