@@ -1,4 +1,3 @@
-import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useDocumentStore } from '@/store/documentStore';
 import { useLayerStore } from '@/store/layerStore';
@@ -216,10 +215,10 @@ describe('DropzoneOverlay Visual Polish and Accessibility', () => {
     );
 
     const overlay = screen.getByTestId('test-dropzone');
-    expect(overlay).toBeTruthy();
-    expect(screen.getByText('Drop your image here')).toBeTruthy();
-    expect(screen.getByText('Release to add as a new layer')).toBeTruthy();
-    expect(screen.getByText('PNG, JPG, WebP, SVG, GIF, PXF')).toBeTruthy();
+    expect(overlay).toBeInTheDocument();
+    expect(screen.getByText('Drop your image here')).toBeInTheDocument();
+    expect(screen.getByText('Release to add as a new layer')).toBeInTheDocument();
+    expect(screen.getByText('PNG, JPG, WebP, SVG, GIF, PXF')).toBeInTheDocument();
 
     // Check SVG animated dashed border exists
     const svgRect = overlay.querySelector('rect.dropzone-dash-stroke');
@@ -237,9 +236,9 @@ describe('DropzoneOverlay Visual Polish and Accessibility', () => {
     );
 
     const overlay = screen.getByTestId('test-confirming');
-    expect(overlay).toBeTruthy();
-    expect(screen.getByText('Image dropped!')).toBeTruthy();
-    expect(screen.getByText('Adding new layer to canvas...')).toBeTruthy();
+    expect(overlay).toBeInTheDocument();
+    expect(screen.getByText('Image dropped!')).toBeInTheDocument();
+    expect(screen.getByText('Adding new layer to canvas...')).toBeInTheDocument();
   });
 
   it('renders error state with retry and dismiss options', () => {
@@ -256,16 +255,16 @@ describe('DropzoneOverlay Visual Polish and Accessibility', () => {
       />
     );
 
-    expect(screen.getByText('Upload Problem')).toBeTruthy();
-    expect(screen.getByText('Unsupported file type. Please upload an image.')).toBeTruthy();
+    expect(screen.getByText('Upload Problem')).toBeInTheDocument();
+    expect(screen.getByText('Unsupported file type. Please upload an image.')).toBeInTheDocument();
 
     const retryBtn = screen.getByRole('button', { name: /try again/i });
-    expect(retryBtn).toBeTruthy();
+    expect(retryBtn).toBeInTheDocument();
     fireEvent.click(retryBtn);
     expect(handleRetry).toHaveBeenCalledTimes(1);
 
     const dismissBtn = screen.getByRole('button', { name: /dismiss/i });
-    expect(dismissBtn).toBeTruthy();
+    expect(dismissBtn).toBeInTheDocument();
     fireEvent.click(dismissBtn);
     expect(handleDismiss).toHaveBeenCalledTimes(1);
   });

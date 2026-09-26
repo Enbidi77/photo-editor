@@ -14,6 +14,7 @@ import { editorTokens } from '@/theme/palette';
 import { formatDistanceToNow } from 'date-fns';
 import { Plus, FolderOpen, Image as ImageIcon, Trash2, Clock, Upload } from 'lucide-react';
 import { isFormInputElement } from '@/lib/keyboard/shortcutRegistry';
+import { DropzoneOverlay, DropzoneState } from '@/components/common/DropzoneOverlay';
 import Button from '@mui/material/Button';
 import { nanoid } from 'nanoid';
 
@@ -51,22 +52,49 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onOpenEditor }) => {
     onOpenEditor();
   };
 
-  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [dropState, setDropState] = useState<DropzoneState>('idle');
+  const [dropError, setDropError] = useState<string>('');
   const dragCounterRef = useRef(0);
+  const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const clearErrorTimeout = useCallback(() => {
+    if (errorTimeoutRef.current) {
+      clearTimeout(errorTimeoutRef.current);
+      errorTimeoutRef.current = null;
+    }
+  }, []);
+
+  const triggerError = useCallback(
+    (msg: string) => {
+      clearErrorTimeout();
+      setDropError(msg);
+      setDropState('error');
+      errorTimeoutRef.current = setTimeout(() => {
+        setDropState('idle');
+      }, 6000);
+    },
+    [clearErrorTimeout]
+  );
 
   const processFiles = useCallback(
     async (files: File[]) => {
+      clearErrorTimeout();
+
       const pxfFile = files.find(
         (f) => f.name.endsWith('.pxf') || f.type === 'application/json'
       );
       if (pxfFile) {
         try {
+          setDropState('confirming');
+          await new Promise((r) => setTimeout(r, 450));
           const project = await PxfSerializer.loadFromFile(pxfFile);
           await projectRepository.save(project);
+          setDropState('idle');
           onOpenEditor();
           showToast(`Opened project "${pxfFile.name}"`, 'success');
           return;
         } catch {
+          triggerError('Failed to open project file. The file may be corrupted.');
           showToast('Failed to open project file', 'error');
           return;
         }
@@ -77,11 +105,14 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onOpenEditor }) => {
       );
 
       if (imageFiles.length === 0) {
-        showToast('Please drop valid image files or .pxf projects', 'warning');
+        triggerError('Unsupported file type. Please upload an image (PNG, JPG, WebP, SVG, GIF) or .pxf project.');
         return;
       }
 
       try {
+        setDropState('confirming');
+        await new Promise((r) => setTimeout(r, 450));
+
         clearLayers();
         clearHistory();
 
@@ -147,6 +178,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onOpenEditor }) => {
           useLayerStore.getState().addLayer(layer, 0);
         }
 
+        setDropState('idle');
         onOpenEditor();
         if (imageFiles.length === 1) {
           showToast(`Imported "${firstImg.name}"`, 'success');
@@ -154,10 +186,11 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onOpenEditor }) => {
           showToast(`Imported ${imageFiles.length} images`, 'success');
         }
       } catch {
+        triggerError('Failed to load image file. Please verify the file is valid.');
         showToast('Failed to load image file', 'error');
       }
     },
-    [clearLayers, clearHistory, createNewDocument, onOpenEditor, showToast]
+    [clearLayers, clearHistory, createNewDocument, onOpenEditor, showToast, triggerError, clearErrorTimeout]
   );
 
   const handleOpenFile = () => {
@@ -175,20 +208,24 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onOpenEditor }) => {
   };
 
   // Drag and drop handlers for StartScreen
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    if (e.dataTransfer?.types && Array.from(e.dataTransfer.types).includes('Files')) {
-      dragCounterRef.current += 1;
-      setIsDraggingOver(true);
-    }
-  }, []);
+  const handleDragEnter = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer?.types && Array.from(e.dataTransfer.types).includes('Files')) {
+        dragCounterRef.current += 1;
+        clearErrorTimeout();
+        setDropState('dragging');
+      }
+    },
+    [clearErrorTimeout]
+  );
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     dragCounterRef.current -= 1;
     if (dragCounterRef.current <= 0) {
       dragCounterRef.current = 0;
-      setIsDraggingOver(false);
+      setDropState((prev) => (prev === 'dragging' ? 'idle' : prev));
     }
   }, []);
 
@@ -201,10 +238,11 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onOpenEditor }) => {
     async (e: React.DragEvent) => {
       e.preventDefault();
       dragCounterRef.current = 0;
-      setIsDraggingOver(false);
       const files = Array.from(e.dataTransfer.files);
       if (files.length > 0) {
         processFiles(files);
+      } else {
+        setDropState('idle');
       }
     },
     [processFiles]
@@ -303,6 +341,8 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onOpenEditor }) => {
           padding: '16px 40px',
           borderBottom: `1px solid ${editorTokens.border.subtle}`,
           backgroundColor: editorTokens.bg.toolbar,
+          filter: dropState === 'dragging' ? 'blur(4px) brightness(0.6)' : 'none',
+          transition: 'filter 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -350,55 +390,103 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onOpenEditor }) => {
       </div>
 
       {/* Main Content Area */}
-      <div style={{ padding: '32px 40px', maxWidth: 1200, width: '100%', margin: '0 auto' }}>
+      <div
+        style={{
+          padding: '32px 40px',
+          maxWidth: 1200,
+          width: '100%',
+          margin: '0 auto',
+          filter: dropState === 'dragging' ? 'blur(4px) brightness(0.6)' : 'none',
+          transition: 'filter 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+        }}
+      >
         {/* Drag & Drop Upload Dropzone Card */}
         <div
           data-testid="start-screen-dropzone"
+          role="button"
+          tabIndex={0}
+          aria-label="Upload image or project file. Press Enter or Space to choose a file, or drag and drop files here."
           onClick={handleOpenFile}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleOpenFile();
+            }
+          }}
           style={{
             marginBottom: 32,
-            padding: '28px 24px',
+            padding: '32px 24px',
             border: `2px dashed ${editorTokens.border.medium}`,
-            borderRadius: 6,
+            borderRadius: 8,
             backgroundColor: editorTokens.bg.panel,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 10,
+            gap: 12,
             cursor: 'pointer',
-            transition: 'border-color 0.15s ease, background-color 0.15s ease',
+            transition: 'border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease, outline 0.15s ease',
             textAlign: 'center',
+            outline: 'none',
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = editorTokens.accent.primary;
+            e.currentTarget.style.boxShadow = `0 0 20px ${editorTokens.accent.primary}44`;
+            e.currentTarget.style.outline = `2px solid ${editorTokens.border.focus}`;
+            e.currentTarget.style.outlineOffset = '2px';
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = editorTokens.border.medium;
+            e.currentTarget.style.boxShadow = 'none';
+            e.currentTarget.style.outline = 'none';
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.borderColor = editorTokens.accent.primary;
             e.currentTarget.style.backgroundColor = editorTokens.bg.surface;
+            e.currentTarget.style.boxShadow = `0 0 20px ${editorTokens.accent.primary}33`;
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.borderColor = editorTokens.border.medium;
             e.currentTarget.style.backgroundColor = editorTokens.bg.panel;
+            e.currentTarget.style.boxShadow = 'none';
           }}
         >
           <div
             style={{
-              width: 48,
-              height: 48,
+              width: 52,
+              height: 52,
               borderRadius: '50%',
               backgroundColor: `${editorTokens.accent.primary}22`,
+              border: `1px solid ${editorTokens.accent.primary}66`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: editorTokens.accent.primary,
             }}
           >
-            <Upload size={24} />
+            <Upload size={26} strokeWidth={2.2} />
           </div>
           <div>
-            <div style={{ fontSize: '0.95rem', fontWeight: 600, color: editorTokens.text.primary, marginBottom: 4 }}>
-              Drag & drop images or projects here to start editing
+            <div style={{ fontSize: '1.02rem', fontWeight: 700, color: '#ffffff', marginBottom: 4 }}>
+              Drag & drop an image or project here to start
             </div>
-            <div style={{ fontSize: '0.78rem', color: editorTokens.text.secondary }}>
-              Or <span style={{ color: editorTokens.accent.primary, textDecoration: 'underline' }}>browse from your computer</span> • Supports PNG, JPG, WebP, SVG, GIF, PXF
+            <div style={{ fontSize: '0.82rem', color: '#d0d0d0', marginBottom: 8 }}>
+              Or <span style={{ color: editorTokens.accent.primary, textDecoration: 'underline', fontWeight: 600 }}>browse files</span> from your computer
+            </div>
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '3px 10px',
+                borderRadius: 16,
+                backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                fontSize: '0.72rem',
+                color: '#aaaaaa',
+              }}
+            >
+              <span>PNG, JPG, WebP, SVG, GIF, PXF</span>
             </div>
           </div>
         </div>
@@ -532,52 +620,19 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onOpenEditor }) => {
         )}
       </div>
 
-      {/* Fullscreen Drag Overlay */}
-      {isDraggingOver && (
-        <div
-          data-testid="start-screen-drag-overlay"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(15, 15, 15, 0.85)',
-            backdropFilter: 'blur(8px)',
-            zIndex: 9999,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 16,
-            pointerEvents: 'none',
-            border: `3px dashed ${editorTokens.accent.primary}`,
-            margin: 16,
-            borderRadius: 12,
-            boxShadow: `0 0 32px ${editorTokens.accent.primary}55`,
-          }}
-        >
-          <div
-            style={{
-              width: 80,
-              height: 80,
-              borderRadius: '50%',
-              backgroundColor: `${editorTokens.accent.primary}33`,
-              border: `2px solid ${editorTokens.accent.primary}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: editorTokens.accent.primary,
-              boxShadow: `0 0 20px ${editorTokens.accent.primary}88`,
-            }}
-          >
-            <Upload size={40} />
-          </div>
-          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#ffffff' }}>
-            Drop Image or Project to Open
-          </div>
-          <div style={{ fontSize: '0.88rem', color: editorTokens.text.secondary }}>
-            PixelForge will automatically create a new canvas or load your project
-          </div>
-        </div>
-      )}
+      {/* Fullscreen Drag Overlay with confirmation and accessible error states */}
+      <DropzoneOverlay
+        state={dropState}
+        title="Drop your image here"
+        subtitle="Release to create a new project canvas"
+        confirmTitle="Image dropped!"
+        confirmSubtitle="Preparing your project canvas..."
+        errorMessage={dropError}
+        onRetry={handleOpenFile}
+        onDismissError={() => setDropState('idle')}
+        fullScreen={true}
+        testId="start-screen-drag-overlay"
+      />
     </div>
   );
 };

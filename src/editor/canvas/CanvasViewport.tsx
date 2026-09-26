@@ -21,6 +21,8 @@ import { AddLayerCommand } from '../commands/LayerCommands';
 import { ImageLayer, DEFAULT_ADJUSTMENTS } from '@/types/layer';
 import { editorTokens } from '@/theme/palette';
 import { isFormInputElement } from '@/lib/keyboard/shortcutRegistry';
+import { DropzoneOverlay, DropzoneState } from '@/components/common/DropzoneOverlay';
+import { PxfSerializer } from '@/editor/export/PxfSerializer';
 import { nanoid } from 'nanoid';
 
 interface CanvasViewportProps {
@@ -60,6 +62,27 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const [isPanning, setIsPanning] = useState(false);
   const isPanningRef = useRef(false);
   const lastMousePosRef = useRef({ x: 0, y: 0 });
+  const [dropState, setDropState] = useState<DropzoneState>('idle');
+  const [dropError, setDropError] = useState<string>('');
+  const dragCounterRef = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const clearErrorTimeout = useCallback(() => {
+    if (errorTimeoutRef.current) {
+      clearTimeout(errorTimeoutRef.current);
+      errorTimeoutRef.current = null;
+    }
+  }, []);
+
+  const triggerError = useCallback((msg: string) => {
+    clearErrorTimeout();
+    setDropError(msg);
+    setDropState('error');
+    errorTimeoutRef.current = setTimeout(() => {
+      setDropState('idle');
+    }, 5000);
+  }, [clearErrorTimeout]);
 
   // Update viewport size on resize
   useEffect(() => {
@@ -180,12 +203,19 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
   // Helper to place an imported image onto canvas
   const placeImageOnCanvas = useCallback(
-    (imgInfo: { dataUrl: string; name: string; width: number; height: number }) => {
+    (
+      imgInfo: { dataUrl: string; name: string; width: number; height: number },
+      dropDocPos?: { x: number; y: number },
+      offsetIndex = 0
+    ) => {
       if (!doc) return;
 
+      const imgWidth = imgInfo.width || 800;
+      const imgHeight = imgInfo.height || 600;
+
       // Fit image reasonably inside canvas if larger than document
-      let targetW = imgInfo.width;
-      let targetH = imgInfo.height;
+      let targetW = imgWidth;
+      let targetH = imgHeight;
       const maxW = doc.width * 0.85;
       const maxH = doc.height * 0.85;
 
@@ -195,9 +225,14 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         targetH = Math.round(targetH * scale);
       }
 
-      // Center on document
-      const posX = Math.round((doc.width - targetW) / 2);
-      const posY = Math.round((doc.height - targetH) / 2);
+      // Position: centered at drop cursor position if provided, else centered on document
+      let posX = Math.round((doc.width - targetW) / 2);
+      let posY = Math.round((doc.height - targetH) / 2);
+
+      if (dropDocPos) {
+        posX = Math.round(dropDocPos.x - targetW / 2) + offsetIndex * 24;
+        posY = Math.round(dropDocPos.y - targetH / 2) + offsetIndex * 24;
+      }
 
       const newImageLayer: ImageLayer = {
         id: nanoid(),
@@ -215,8 +250,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         zIndex: layers.length,
         parentId: null,
         imageUrl: imgInfo.dataUrl,
-        naturalWidth: imgInfo.width,
-        naturalHeight: imgInfo.height,
+        naturalWidth: imgWidth,
+        naturalHeight: imgHeight,
         adjustments: { ...DEFAULT_ADJUSTMENTS },
       };
 
@@ -229,24 +264,127 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   );
 
   // Drag and drop image files directly onto canvas
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragEnter = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer?.types && Array.from(e.dataTransfer.types).includes('Files')) {
+        dragCounterRef.current += 1;
+        clearErrorTimeout();
+        setDropState('dragging');
+      }
+    },
+    [clearErrorTimeout]
+  );
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setDropState((prev) => (prev === 'dragging' ? 'idle' : prev));
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
-  };
+  }, []);
 
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    const files = Array.from(e.dataTransfer.files);
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      dragCounterRef.current = 0;
+
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length === 0) {
+        setDropState('idle');
+        return;
+      }
+
+      const validFiles = files.filter(
+        (f) =>
+          f.type.startsWith('image/') ||
+          /\.(png|jpe?g|webp|svg|gif|bmp)$/i.test(f.name) ||
+          f.name.endsWith('.pxf') ||
+          f.type === 'application/json'
+      );
+
+      if (validFiles.length === 0) {
+        triggerError('Unsupported file type. Please drop an image (PNG, JPG, WebP, SVG, GIF) or .pxf project.');
+        return;
+      }
+
+      // Show brief confirmation animation before processing begins
+      setDropState('confirming');
+      await new Promise((resolve) => setTimeout(resolve, 450));
+
+      // Calculate drop coordinates in document space if dropped near document area
+      let dropDocPos: { x: number; y: number } | undefined;
+      const container = containerRef.current;
+      if (container && doc) {
+        const rect = container.getBoundingClientRect();
+        const clientX = e.clientX - rect.left;
+        const clientY = e.clientY - rect.top;
+        const docX = (clientX - centerDocX) / zoom;
+        const docY = (clientY - centerDocY) / zoom;
+        dropDocPos = { x: Math.round(docX), y: Math.round(docY) };
+      }
+
+      let importedCount = 0;
+      for (const file of validFiles) {
+        if (file.name.endsWith('.pxf') || file.type === 'application/json') {
+          try {
+            await PxfSerializer.loadFromFile(file);
+            showToast(`Opened project "${file.name}"`, 'success');
+            setDropState('idle');
+            return;
+          } catch {
+            showToast('Failed to open project file', 'error');
+          }
+        } else {
+          try {
+            const imgInfo = await ImageLoader.loadFromFile(file);
+            placeImageOnCanvas(imgInfo, dropDocPos, importedCount);
+            importedCount++;
+          } catch (err) {
+            showToast(`Failed to load "${file.name}"`, 'error');
+          }
+        }
+      }
+
+      setDropState('idle');
+    },
+    [doc, centerDocX, centerDocY, zoom, placeImageOnCanvas, showToast, triggerError]
+  );
+
+  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setDropState('confirming');
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    let count = 0;
     for (const file of files) {
-      if (file.type.startsWith('image/')) {
+      if (file.name.endsWith('.pxf') || file.type === 'application/json') {
+        try {
+          await PxfSerializer.loadFromFile(file);
+          showToast(`Opened project "${file.name}"`, 'success');
+          setDropState('idle');
+          return;
+        } catch {
+          showToast('Failed to open project file', 'error');
+        }
+      } else if (file.type.startsWith('image/') || /\.(png|jpe?g|webp|svg|gif|bmp)$/i.test(file.name)) {
         try {
           const imgInfo = await ImageLoader.loadFromFile(file);
-          placeImageOnCanvas(imgInfo);
-        } catch (err) {
-          showToast('Failed to import image', 'error');
+          placeImageOnCanvas(imgInfo, undefined, count);
+          count++;
+        } catch {
+          showToast(`Failed to load "${file.name}"`, 'error');
         }
       }
     }
+    setDropState('idle');
+    e.target.value = '';
   };
 
   // Clipboard paste listener (Ctrl+V)
@@ -295,6 +433,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
       onWheel={handleWheel}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
@@ -335,6 +475,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
             boxShadow: editorTokens.shadow.canvasDoc,
             outline: `1px solid ${editorTokens.border.medium}`,
             transformOrigin: '0 0',
+            filter: dropState === 'dragging' ? 'blur(3px) brightness(0.65)' : 'none',
+            transition: 'filter 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
           }}
         >
           {/* Transparency Checkerboard */}
@@ -401,6 +543,29 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           <RemoteCursorsOverlay zoom={zoom} />
         </div>
       )}
+
+      {/* Hidden file input for error retry */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept="image/*,.pxf,application/json"
+        style={{ display: 'none' }}
+        onChange={handleFileInputChange}
+      />
+
+      {/* Prominent, accessible DropzoneOverlay */}
+      <DropzoneOverlay
+        state={dropState}
+        title="Drop your image here"
+        subtitle="Release to add directly as a new layer"
+        confirmTitle="Image dropped!"
+        confirmSubtitle="Adding new layer to canvas..."
+        errorMessage={dropError}
+        onRetry={() => fileInputRef.current?.click()}
+        onDismissError={() => setDropState('idle')}
+        testId="canvas-dropzone-overlay"
+      />
     </div>
   );
 };
