@@ -196,10 +196,11 @@ describe('LocalCollaborationAdapter', () => {
       name: 'Synced Project',
       width: 1920,
       height: 1080,
-      colorSpace: 'srgb',
-      colorDepth: '8bit',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      resolution: 72,
+      backgroundColor: '#ffffff',
+      colorMode: 'RGB',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
       isDirty: false,
     });
     useLayerStore.getState().setLayers([

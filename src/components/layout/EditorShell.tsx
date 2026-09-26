@@ -395,6 +395,22 @@ export const EditorShell: React.FC = () => {
     };
   }, [handleKeyDown, handleKeyUp]);
 
+  // Prevent browser navigating away when files are dragged/dropped outside canvas dropzone
+  useEffect(() => {
+    const handleGlobalDragOver = (e: DragEvent) => {
+      e.preventDefault();
+    };
+    const handleGlobalDrop = (e: DragEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('dragover', handleGlobalDragOver);
+    window.addEventListener('drop', handleGlobalDrop);
+    return () => {
+      window.removeEventListener('dragover', handleGlobalDragOver);
+      window.removeEventListener('drop', handleGlobalDrop);
+    };
+  }, []);
+
   return (
     <div
       onContextMenu={(e) => {

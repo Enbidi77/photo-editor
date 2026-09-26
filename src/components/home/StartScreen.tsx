@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useDocumentStore } from '@/store/documentStore';
 import { useLayerStore } from '@/store/layerStore';
 import { useHistoryStore } from '@/store/historyStore';
@@ -12,7 +12,8 @@ import { ImageLoader } from '@/lib/image/imageLoader';
 import { ImageLayer, DEFAULT_ADJUSTMENTS } from '@/types/layer';
 import { editorTokens } from '@/theme/palette';
 import { formatDistanceToNow } from 'date-fns';
-import { Plus, FolderOpen, Image as ImageIcon, Trash2, Clock } from 'lucide-react';
+import { Plus, FolderOpen, Image as ImageIcon, Trash2, Clock, Upload } from 'lucide-react';
+import { isFormInputElement } from '@/lib/keyboard/shortcutRegistry';
 import Button from '@mui/material/Button';
 import { nanoid } from 'nanoid';
 
@@ -50,60 +51,208 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onOpenEditor }) => {
     onOpenEditor();
   };
 
-  const handleOpenFile = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*,.pxf,application/json';
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const dragCounterRef = useRef(0);
 
-      if (file.name.endsWith('.pxf') || file.type === 'application/json') {
+  const processFiles = useCallback(
+    async (files: File[]) => {
+      const pxfFile = files.find(
+        (f) => f.name.endsWith('.pxf') || f.type === 'application/json'
+      );
+      if (pxfFile) {
         try {
-          const project = await PxfSerializer.loadFromFile(file);
+          const project = await PxfSerializer.loadFromFile(pxfFile);
           await projectRepository.save(project);
           onOpenEditor();
-          showToast(`Opened project "${file.name}"`, 'success');
+          showToast(`Opened project "${pxfFile.name}"`, 'success');
+          return;
         } catch {
           showToast('Failed to open project file', 'error');
+          return;
         }
-      } else if (file.type.startsWith('image/')) {
-        try {
-          const imgInfo = await ImageLoader.loadFromFile(file);
-          clearLayers();
-          clearHistory();
-          createNewDocument(imgInfo.name, imgInfo.width, imgInfo.height, 72, '#ffffff');
+      }
 
-          const newImageLayer: ImageLayer = {
+      const imageFiles = files.filter(
+        (f) => f.type.startsWith('image/') || /\.(png|jpe?g|webp|svg|gif|bmp)$/i.test(f.name)
+      );
+
+      if (imageFiles.length === 0) {
+        showToast('Please drop valid image files or .pxf projects', 'warning');
+        return;
+      }
+
+      try {
+        clearLayers();
+        clearHistory();
+
+        const firstImg = await ImageLoader.loadFromFile(imageFiles[0]);
+        const baseWidth = firstImg.width || 800;
+        const baseHeight = firstImg.height || 600;
+        createNewDocument(firstImg.name, baseWidth, baseHeight, 72, '#ffffff');
+
+        const firstLayer: ImageLayer = {
+          id: nanoid(),
+          type: 'IMAGE',
+          name: firstImg.name,
+          visible: true,
+          locked: false,
+          opacity: 1,
+          blendMode: 'normal',
+          x: 0,
+          y: 0,
+          width: baseWidth,
+          height: baseHeight,
+          rotation: 0,
+          zIndex: 0,
+          parentId: null,
+          imageUrl: firstImg.dataUrl,
+          naturalWidth: baseWidth,
+          naturalHeight: baseHeight,
+          adjustments: { ...DEFAULT_ADJUSTMENTS },
+        };
+        useLayerStore.getState().addLayer(firstLayer, 0);
+
+        for (let i = 1; i < imageFiles.length; i++) {
+          const extraImg = await ImageLoader.loadFromFile(imageFiles[i]);
+          let w = extraImg.width || 800;
+          let h = extraImg.height || 600;
+          if (w > baseWidth || h > baseHeight) {
+            const scale = Math.min(baseWidth / w, baseHeight / h);
+            w = Math.round(w * scale);
+            h = Math.round(h * scale);
+          }
+          const x = Math.round((baseWidth - w) / 2) + i * 20;
+          const y = Math.round((baseHeight - h) / 2) + i * 20;
+
+          const layer: ImageLayer = {
             id: nanoid(),
             type: 'IMAGE',
-            name: imgInfo.name,
+            name: extraImg.name,
             visible: true,
             locked: false,
             opacity: 1,
             blendMode: 'normal',
-            x: 0,
-            y: 0,
-            width: imgInfo.width,
-            height: imgInfo.height,
+            x,
+            y,
+            width: w,
+            height: h,
             rotation: 0,
-            zIndex: 0,
+            zIndex: i,
             parentId: null,
-            imageUrl: imgInfo.dataUrl,
-            naturalWidth: imgInfo.width,
-            naturalHeight: imgInfo.height,
+            imageUrl: extraImg.dataUrl,
+            naturalWidth: extraImg.width || 800,
+            naturalHeight: extraImg.height || 600,
             adjustments: { ...DEFAULT_ADJUSTMENTS },
           };
-          useLayerStore.getState().addLayer(newImageLayer, 0);
-          onOpenEditor();
-          showToast(`Imported "${imgInfo.name}"`, 'success');
-        } catch {
-          showToast('Failed to load image', 'error');
+          useLayerStore.getState().addLayer(layer, 0);
         }
+
+        onOpenEditor();
+        if (imageFiles.length === 1) {
+          showToast(`Imported "${firstImg.name}"`, 'success');
+        } else {
+          showToast(`Imported ${imageFiles.length} images`, 'success');
+        }
+      } catch {
+        showToast('Failed to load image file', 'error');
+      }
+    },
+    [clearLayers, clearHistory, createNewDocument, onOpenEditor, showToast]
+  );
+
+  const handleOpenFile = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = 'image/*,.pxf,application/json';
+    input.onchange = (e) => {
+      const files = Array.from((e.target as HTMLInputElement).files || []);
+      if (files.length > 0) {
+        processFiles(files);
       }
     };
     input.click();
   };
+
+  // Drag and drop handlers for StartScreen
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer?.types && Array.from(e.dataTransfer.types).includes('Files')) {
+      dragCounterRef.current += 1;
+      setIsDraggingOver(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setIsDraggingOver(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  }, []);
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      dragCounterRef.current = 0;
+      setIsDraggingOver(false);
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length > 0) {
+        processFiles(files);
+      }
+    },
+    [processFiles]
+  );
+
+  // Clipboard paste listener (Ctrl+V) on StartScreen
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      if (isFormInputElement(e.target)) return;
+      if (!e.clipboardData) return;
+
+      const imgInfo = await ImageLoader.loadFromClipboard(e.clipboardData.items);
+      if (imgInfo) {
+        clearLayers();
+        clearHistory();
+        const baseWidth = imgInfo.width || 800;
+        const baseHeight = imgInfo.height || 600;
+        createNewDocument(imgInfo.name, baseWidth, baseHeight, 72, '#ffffff');
+
+        const newImageLayer: ImageLayer = {
+          id: nanoid(),
+          type: 'IMAGE',
+          name: imgInfo.name,
+          visible: true,
+          locked: false,
+          opacity: 1,
+          blendMode: 'normal',
+          x: 0,
+          y: 0,
+          width: baseWidth,
+          height: baseHeight,
+          rotation: 0,
+          zIndex: 0,
+          parentId: null,
+          imageUrl: imgInfo.dataUrl,
+          naturalWidth: baseWidth,
+          naturalHeight: baseHeight,
+          adjustments: { ...DEFAULT_ADJUSTMENTS },
+        };
+        useLayerStore.getState().addLayer(newImageLayer, 0);
+        onOpenEditor();
+        showToast(`Imported "${imgInfo.name}"`, 'success');
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [clearLayers, clearHistory, createNewDocument, onOpenEditor, showToast]);
 
   const handleOpenRecentProject = async (id: string) => {
     try {
@@ -140,6 +289,10 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onOpenEditor }) => {
         color: editorTokens.text.primary,
         overflowY: 'auto',
       }}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
     >
       {/* Top Header */}
       <div
@@ -198,6 +351,58 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onOpenEditor }) => {
 
       {/* Main Content Area */}
       <div style={{ padding: '32px 40px', maxWidth: 1200, width: '100%', margin: '0 auto' }}>
+        {/* Drag & Drop Upload Dropzone Card */}
+        <div
+          data-testid="start-screen-dropzone"
+          onClick={handleOpenFile}
+          style={{
+            marginBottom: 32,
+            padding: '28px 24px',
+            border: `2px dashed ${editorTokens.border.medium}`,
+            borderRadius: 6,
+            backgroundColor: editorTokens.bg.panel,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
+            cursor: 'pointer',
+            transition: 'border-color 0.15s ease, background-color 0.15s ease',
+            textAlign: 'center',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = editorTokens.accent.primary;
+            e.currentTarget.style.backgroundColor = editorTokens.bg.surface;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = editorTokens.border.medium;
+            e.currentTarget.style.backgroundColor = editorTokens.bg.panel;
+          }}
+        >
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: '50%',
+              backgroundColor: `${editorTokens.accent.primary}22`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: editorTokens.accent.primary,
+            }}
+          >
+            <Upload size={24} />
+          </div>
+          <div>
+            <div style={{ fontSize: '0.95rem', fontWeight: 600, color: editorTokens.text.primary, marginBottom: 4 }}>
+              Drag & drop images or projects here to start editing
+            </div>
+            <div style={{ fontSize: '0.78rem', color: editorTokens.text.secondary }}>
+              Or <span style={{ color: editorTokens.accent.primary, textDecoration: 'underline' }}>browse from your computer</span> • Supports PNG, JPG, WebP, SVG, GIF, PXF
+            </div>
+          </div>
+        </div>
+
         <div style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: 20, display: 'flex', alignItems: 'center', gap: 8 }}>
           <Clock size={18} color={editorTokens.accent.primary} />
           <span>Recent Projects</span>
@@ -326,6 +531,53 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onOpenEditor }) => {
           </div>
         )}
       </div>
+
+      {/* Fullscreen Drag Overlay */}
+      {isDraggingOver && (
+        <div
+          data-testid="start-screen-drag-overlay"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 15, 15, 0.85)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 9999,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 16,
+            pointerEvents: 'none',
+            border: `3px dashed ${editorTokens.accent.primary}`,
+            margin: 16,
+            borderRadius: 12,
+            boxShadow: `0 0 32px ${editorTokens.accent.primary}55`,
+          }}
+        >
+          <div
+            style={{
+              width: 80,
+              height: 80,
+              borderRadius: '50%',
+              backgroundColor: `${editorTokens.accent.primary}33`,
+              border: `2px solid ${editorTokens.accent.primary}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: editorTokens.accent.primary,
+              boxShadow: `0 0 20px ${editorTokens.accent.primary}88`,
+            }}
+          >
+            <Upload size={40} />
+          </div>
+          <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#ffffff' }}>
+            Drop Image or Project to Open
+          </div>
+          <div style={{ fontSize: '0.88rem', color: editorTokens.text.secondary }}>
+            PixelForge will automatically create a new canvas or load your project
+          </div>
+        </div>
+      )}
     </div>
   );
 };
